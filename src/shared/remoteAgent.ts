@@ -27,6 +27,23 @@ export interface RemoteAgentsDoc {
   items: RemoteAgentRecord[]
 }
 
+export interface RemoteAgentOnboardingInput {
+  id: string
+  name: string
+  platform: 'linux'
+  selectedLocalAddress: string
+  tagPolicy: RemoteAgentTagPolicy
+  onboardingToken: string
+  onboardingExpiresAt: string
+}
+
+export interface RemoteAgentOnlineUpdate {
+  id: string
+  agentBaseUrl: string
+  agentVersion: string
+  lastSeenAt: string
+}
+
 export interface RemoteAgentPluginConfigRecord {
   machineId: string
   pluginName: string

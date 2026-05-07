@@ -1,6 +1,6 @@
 import type {
-  PendingRemoteAgentRecord,
-  RemoteAgentRecord,
+  RemoteAgentOnboardingInput,
+  RemoteAgentOnlineUpdate,
   RemoteAgentsDoc
 } from '../../../shared/remoteAgent'
 
@@ -10,31 +10,55 @@ export function createEmptyRemoteAgentsDoc(): RemoteAgentsDoc {
 
 export function createPendingRemoteAgent(
   doc: RemoteAgentsDoc,
-  input: Omit<PendingRemoteAgentRecord, 'status'>
+  input: RemoteAgentOnboardingInput
 ): RemoteAgentsDoc {
   const others = doc.items.filter((item) => item.id !== input.id)
+  const { id, name, platform, selectedLocalAddress, tagPolicy, onboardingToken, onboardingExpiresAt } =
+    input
 
   return {
-    items: [...others, { ...input, status: 'pending' }]
+    items: [
+      ...others,
+      {
+        id,
+        name,
+        platform,
+        selectedLocalAddress,
+        tagPolicy,
+        status: 'pending',
+        onboardingToken,
+        onboardingExpiresAt,
+        agentBaseUrl: undefined,
+        agentVersion: undefined,
+        lastSeenAt: undefined,
+        lastError: undefined
+      }
+    ]
   }
 }
 
 export function markRemoteAgentOnline(
   doc: RemoteAgentsDoc,
-  input: Pick<RemoteAgentRecord, 'id' | 'agentBaseUrl' | 'agentVersion' | 'lastSeenAt'>
+  input: RemoteAgentOnlineUpdate
 ): RemoteAgentsDoc {
+  const { id, agentBaseUrl, agentVersion, lastSeenAt } = input
+
+  if (!agentBaseUrl || !agentVersion || !lastSeenAt) {
+    throw new Error('agentBaseUrl, agentVersion, and lastSeenAt are required')
+  }
+
   return {
     items: doc.items.map((item) =>
-      item.id !== input.id
+      item.id !== id
         ? item
         : {
             ...item,
             status: 'online',
             onboardingToken: undefined,
             onboardingExpiresAt: undefined,
-            agentBaseUrl: input.agentBaseUrl,
-            agentVersion: input.agentVersion,
-            lastSeenAt: input.lastSeenAt,
+            agentBaseUrl,
+            agentVersion,
+            lastSeenAt,
             lastError: undefined
           }
     )

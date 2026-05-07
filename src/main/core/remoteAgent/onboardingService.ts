@@ -1,5 +1,9 @@
 import type { PendingRemoteAgentRecord } from '../../../shared/remoteAgent'
 
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`
+}
+
 export class RemoteAgentOnboardingService {
   constructor(private readonly port: number) {}
 
@@ -9,9 +13,9 @@ export class RemoteAgentOnboardingService {
     return [
       '#!/bin/sh',
       'set -eu',
-      `AGENT_MACHINE_ID="${record.id}"`,
-      `AGENT_TOKEN="${record.onboardingToken}"`,
-      `AGENT_REGISTER_URL="${installUrl}"`,
+      `AGENT_MACHINE_ID=${shellQuote(record.id)}`,
+      `AGENT_TOKEN=${shellQuote(record.onboardingToken)}`,
+      `AGENT_REGISTER_URL=${shellQuote(installUrl)}`,
       'echo "Installing ZTools Linux agent..."',
       'mkdir -p "$HOME/.ztools-agent"',
       'cat > "$HOME/.ztools-agent/config.env" <<EOF',

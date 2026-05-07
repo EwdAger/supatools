@@ -61,6 +61,60 @@ describe('remote agent store', () => {
     })
   })
 
+  it('re-onboards an existing machine by clearing stale runtime fields', () => {
+    const state = createPendingRemoteAgent(
+      {
+        items: [
+          {
+            id: 'agent-1',
+            name: 'Workshop Linux',
+            platform: 'linux',
+            tagPolicy: { mode: 'allow_all' },
+            status: 'error',
+            selectedLocalAddress: '192.168.1.23',
+            onboardingToken: 'old-token',
+            onboardingExpiresAt: '2026-05-07T08:00:00.000Z',
+            agentBaseUrl: 'http://10.0.0.5:8123',
+            agentVersion: '0.0.9',
+            lastSeenAt: '2026-05-07T07:59:00.000Z',
+            lastError: 'connection failed'
+          }
+        ]
+      },
+      {
+        id: 'agent-1',
+        name: 'Workshop Linux',
+        platform: 'linux',
+        selectedLocalAddress: '192.168.1.24',
+        tagPolicy: { mode: 'allow_list', tags: ['scp'] },
+        onboardingToken: 'new-token',
+        onboardingExpiresAt: '2026-05-07T08:15:00.000Z',
+        agentBaseUrl: 'http://10.0.0.6:8123',
+        agentVersion: '0.1.1',
+        lastSeenAt: '2026-05-07T08:10:00.000Z',
+        lastError: 'stale value'
+      } as any
+    )
+
+    expect(state.items[0]).toMatchObject({
+      id: 'agent-1',
+      status: 'pending',
+      selectedLocalAddress: '192.168.1.24',
+      onboardingToken: 'new-token',
+      onboardingExpiresAt: '2026-05-07T08:15:00.000Z'
+    })
+    expect(state.items[0].agentBaseUrl).toBeUndefined()
+    expect(state.items[0].agentVersion).toBeUndefined()
+    expect(state.items[0].lastSeenAt).toBeUndefined()
+    expect(state.items[0].lastError).toBeUndefined()
+  })
+
+  it('rejects online updates that omit required runtime fields', () => {
+    expect(() =>
+      markRemoteAgentOnline(createEmptyRemoteAgentsDoc(), { id: 'agent-1' } as any)
+    ).toThrow()
+  })
+
   it('marks a registered machine online and clears onboarding credentials', () => {
     const pending = createPendingRemoteAgent(createEmptyRemoteAgentsDoc(), {
       id: 'agent-1',
@@ -122,9 +176,9 @@ describe('remote agent store', () => {
       [
         '#!/bin/sh',
         'set -eu',
-        'AGENT_MACHINE_ID="agent-1"',
-        'AGENT_TOKEN="token-1"',
-        'AGENT_REGISTER_URL="http://192.168.1.23:8123/agent/register"',
+        "AGENT_MACHINE_ID='agent-1'",
+        "AGENT_TOKEN='token-1'",
+        "AGENT_REGISTER_URL='http://192.168.1.23:8123/agent/register'",
         'echo "Installing ZTools Linux agent..."',
         'mkdir -p "$HOME/.ztools-agent"',
         'cat > "$HOME/.ztools-agent/config.env" <<EOF',
@@ -133,6 +187,27 @@ describe('remote agent store', () => {
         'AGENT_REGISTER_URL=$AGENT_REGISTER_URL',
         'EOF'
       ].join('\n')
+    )
+  })
+
+  it('shell-escapes machine ids, tokens, and urls in the install script', () => {
+    const service = new RemoteAgentOnboardingService(8123)
+    const pending = createPendingRemoteAgent(createEmptyRemoteAgentsDoc(), {
+      id: "agent-1'$(touch /tmp/pwn)",
+      name: 'Workshop Linux',
+      platform: 'linux',
+      selectedLocalAddress: "10.0.0.5'; echo hacked; '",
+      tagPolicy: { mode: 'allow_all' },
+      onboardingToken: "tok'en;rm -rf /",
+      onboardingExpiresAt: '2026-05-07T08:15:00.000Z'
+    })
+
+    const script = service.renderInstallScript(pending.items[0])
+
+    expect(script).toContain("AGENT_MACHINE_ID='agent-1'\"'\"'$(touch /tmp/pwn)'")
+    expect(script).toContain("AGENT_TOKEN='tok'\"'\"'en;rm -rf /'")
+    expect(script).toContain(
+      "AGENT_REGISTER_URL='http://10.0.0.5'\"'\"'; echo hacked; '\"'\"':8123/agent/register'"
     )
   })
 })
