@@ -5,6 +5,7 @@ import { pathToFileURL } from 'url'
 import api from '../api/index'
 import { BUNDLED_INTERNAL_PLUGIN_NAMES, getInternalPluginPath } from './internalPlugins'
 import { getInternalPluginUrl, getInternalPluginServerPort } from './internalPluginServer'
+import { normalizePluginMetadata } from '../../shared/pluginMetadata'
 
 /**
  * 加载所有内置插件
@@ -42,6 +43,7 @@ export function loadInternalPlugins(): void {
       }
 
       const pluginConfig = JSON.parse(fsSync.readFileSync(pluginJsonPath, 'utf-8'))
+      const { platform, tags } = normalizePluginMetadata(pluginConfig)
 
       // 构建插件信息
       const logoPath = pluginConfig.logo ? path.join(effectivePluginPath, pluginConfig.logo) : ''
@@ -62,6 +64,8 @@ export function loadInternalPlugins(): void {
         logo: logoPath ? pathToFileURL(logoPath).href : '',
         path: effectivePluginPath, // 保存有效路径（开发模式下是 public 目录）
         features: pluginConfig.features || [],
+        platform,
+        tags,
         isDevelopment: isDev,
         main: mainPath
       }

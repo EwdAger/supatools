@@ -11,6 +11,7 @@ import { downloadFile } from '../../utils/download.js'
 import { httpGet } from '../../utils/httpRequest.js'
 import { sleep } from '../../utils/common.js'
 import databaseAPI from '../shared/database'
+import { normalizePluginMetadata } from '../../../shared/pluginMetadata'
 
 /** 插件的本地安装目录 */
 const PLUGIN_DIR = path.join(app.getPath('userData'), 'plugins')
@@ -559,6 +560,7 @@ export class PluginInstallerAPI {
    * 根据插件配置构建 pluginInfo 对象，写入数据库并返回该对象。
    */
   private persistPlugin(config: any, pluginPath: string, extra?: Record<string, any>): any {
+    const { platform, tags } = normalizePluginMetadata(config)
     const pluginInfo = {
       name: config.name,
       title: config.title,
@@ -570,6 +572,8 @@ export class PluginInstallerAPI {
       main: config.main,
       preload: config.preload,
       features: config.features,
+      platform,
+      tags,
       path: pluginPath,
       isDevelopment: false,
       installedAt: new Date().toISOString(),

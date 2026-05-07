@@ -1,5 +1,6 @@
 import path from 'path'
 import { toDevPluginName } from '../../../shared/pluginRuntimeNamespace'
+import { normalizePluginMetadata } from '../../../shared/pluginMetadata'
 
 // ============================================================
 // Types
@@ -29,6 +30,8 @@ export type PluginManifestSnapshot = {
   development?: { main?: string }
   /** 插件可运行平台列表，如 ["win32", "darwin"] */
   platform?: string[]
+  /** 插件标签列表，如 ["scp", "hci"] */
+  tags?: string[]
 }
 
 /** 已安装插件的快照记录，用于注册表与安装列表的交互 */
@@ -43,6 +46,8 @@ export type PluginInstallRecord = {
   main?: string
   preload?: string
   features?: any[]
+  platform?: string[]
+  tags?: string[]
   /** 插件的本地目录路径 */
   path?: string
   /** 是否为开发模式安装 */
@@ -508,6 +513,7 @@ export function buildInstalledDevelopmentPlugin(
 ): PluginInstallRecord {
   const normalizedPath = resolvePath(pluginPath)
   const baseName = pluginConfig.name || path.basename(normalizedPath)
+  const { platform, tags } = normalizePluginMetadata(pluginConfig)
   // 内置插件（setting、system）在开发模式下仅设 isDevelopment: true 而不加 __dev 后缀
   const effectiveName = BUILT_IN_NAMES.has(baseName) ? baseName : toDevPluginName(baseName)
   return {
@@ -521,6 +527,8 @@ export function buildInstalledDevelopmentPlugin(
     main: pluginConfig.development?.main,
     preload: pluginConfig.preload,
     features: Array.isArray(pluginConfig.features) ? pluginConfig.features : [],
+    platform,
+    tags,
     path: normalizedPath,
     isDevelopment: true,
     installedAt: nowIso()

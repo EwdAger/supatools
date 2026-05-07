@@ -25,6 +25,21 @@ describe('pluginDevelopmentRegistry', () => {
     expect(installed.path).toBe('/workspace/demo')
   })
 
+  it('builds the installed snapshot with normalized platform and tags', () => {
+    const installed = buildInstalledDevelopmentPlugin('/workspace/demo', {
+      name: 'demo',
+      title: 'Demo',
+      version: '1.0.0',
+      features: [{ code: 'ui.demo', cmds: ['Demo'] }],
+      platform: ['linux', 'linux'],
+      tags: ['scp', 'HCI'],
+      development: { main: 'http://localhost:8686/' }
+    })
+
+    expect(installed.platform).toEqual(['linux'])
+    expect(installed.tags).toEqual(['scp', 'hci'])
+  })
+
   it('rejects upsert when config name collides with different path', () => {
     const registry = {
       version: 3,
