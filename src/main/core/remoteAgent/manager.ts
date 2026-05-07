@@ -4,6 +4,12 @@ import {
   createEmptyRemoteAgentsDoc,
   createPendingRemoteAgent
 } from './store'
+import {
+  type DeployablePlugin,
+  buildDeployablePluginList,
+  buildRemoteAgentSyncPlan
+} from './deployment'
+import { RemoteAgentClient } from './client'
 import { listLanIpv4Addresses } from './localAddressDiscovery'
 import { RemoteAgentOnboardingService } from './onboardingService'
 import type {
@@ -115,13 +121,62 @@ export class RemoteAgentManager {
   public async syncRemoteAgent(
     machineId: string
   ): Promise<{ success: boolean; summary?: unknown; error?: string }> {
-    const record = this.readAgentsDoc().items.find((item) => item.id === machineId)
-    if (!record) {
-      return { success: false, error: 'Remote agent not found' }
-    }
-    return {
-      success: false,
-      error: `Remote agent sync is not implemented yet for ${record.name}`
+    try {
+      const machine = this.requireMachine(machineId)
+      if (!machine.agentBaseUrl) {
+        return { success: false, error: `Remote agent ${machine.name} has no agentBaseUrl` }
+      }
+
+      const client = new RemoteAgentClient(machine.agentBaseUrl)
+      const deployable = buildDeployablePluginList(this.readInstalledPlugins(), {
+        platform: machine.platform,
+        tagPolicy: machine.tagPolicy
+      })
+      const remotePlugins = await client.listPlugins()
+      const pluginConfigs = this.readPluginConfigs().filter((item) => item.machineId === machine.id)
+      const plan = buildRemoteAgentSyncPlan(deployable, remotePlugins, {
+        uninstallExtraneous: true
+      })
+
+      for (const plugin of plan.install) {
+        await this.runSyncAction(machine.id, plugin.name, 'install', () =>
+          client.installPlugin({ name: plugin.name, version: plugin.version })
+        )
+      }
+
+      for (const plugin of plan.upgrade) {
+        await this.runSyncAction(machine.id, plugin.name, 'upgrade', () =>
+          client.installPlugin({ name: plugin.name, version: plugin.version })
+        )
+      }
+
+      for (const plugin of deployable) {
+        const savedConfig = pluginConfigs.find((item) => item.pluginName === plugin.name)
+        if (!savedConfig) continue
+
+        await this.runSyncAction(machine.id, plugin.name, 'configure', () =>
+          client.configurePlugin({
+            pluginName: plugin.name,
+            config: savedConfig.config
+          })
+        )
+        await this.runSyncAction(machine.id, plugin.name, 'restart', () =>
+          client.restartPlugin({ pluginName: plugin.name })
+        )
+      }
+
+      for (const plugin of plan.uninstall) {
+        await this.runSyncAction(machine.id, plugin.name, 'uninstall', () =>
+          client.uninstallPlugin({ pluginName: plugin.name })
+        )
+      }
+
+      return { success: true, summary: plan }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Remote agent sync failed'
+      }
     }
   }
 
@@ -166,6 +221,14 @@ export class RemoteAgentManager {
     databaseAPI.dbPut(REMOTE_AGENTS_DB_KEY, doc)
   }
 
+  private requireMachine(machineId: string): RemoteAgentRecord {
+    const machine = this.readAgentsDoc().items.find((item) => item.id === machineId)
+    if (!machine) {
+      throw new Error('Remote agent not found')
+    }
+    return machine
+  }
+
   private requirePendingRecord(doc: RemoteAgentsDoc, machineId: string): PendingRemoteAgentRecord {
     const record = doc.items.find((item) => item.id === machineId)
     if (!record || record.status !== 'pending' || !record.onboardingToken || !record.onboardingExpiresAt) {
@@ -179,9 +242,64 @@ export class RemoteAgentManager {
     return Array.isArray(doc) ? (doc as RemoteAgentPluginConfigRecord[]) : []
   }
 
+  private readInstalledPlugins(): DeployablePlugin[] {
+    const doc = databaseAPI.dbGet('plugins')
+    if (!Array.isArray(doc)) return []
+
+    return doc.filter(
+      (item): item is DeployablePlugin =>
+        !!item &&
+        typeof item === 'object' &&
+        typeof (item as DeployablePlugin).name === 'string' &&
+        typeof (item as DeployablePlugin).version === 'string'
+    )
+  }
+
   private readSyncJobs(): RemoteAgentSyncJobRecord[] {
     const doc = databaseAPI.dbGet(REMOTE_AGENT_SYNC_JOBS_DB_KEY)
     return Array.isArray(doc) ? (doc as RemoteAgentSyncJobRecord[]) : []
+  }
+
+  private writeSyncJobs(items: RemoteAgentSyncJobRecord[]): void {
+    databaseAPI.dbPut(REMOTE_AGENT_SYNC_JOBS_DB_KEY, items)
+  }
+
+  private async runSyncAction(
+    machineId: string,
+    pluginName: string,
+    action: RemoteAgentSyncJobRecord['action'],
+    runner: () => Promise<unknown>
+  ): Promise<void> {
+    const startedAt = new Date().toISOString()
+    try {
+      await runner()
+      this.appendSyncJob({
+        machineId,
+        pluginName,
+        action,
+        status: 'success',
+        message: 'ok',
+        startedAt,
+        finishedAt: new Date().toISOString()
+      })
+    } catch (error) {
+      this.appendSyncJob({
+        machineId,
+        pluginName,
+        action,
+        status: 'error',
+        message: error instanceof Error ? error.message : 'unknown error',
+        startedAt,
+        finishedAt: new Date().toISOString()
+      })
+      throw error
+    }
+  }
+
+  private appendSyncJob(job: RemoteAgentSyncJobRecord): void {
+    const jobs = this.readSyncJobs()
+    jobs.push(job)
+    this.writeSyncJobs(jobs)
   }
 }
 
