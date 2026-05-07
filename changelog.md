@@ -1,3 +1,19 @@
+# 2.4.2
+
+## 修复 (Fix)
+
+- 修复远程 Agent 功能只生成安装命令但本地未真正提供 onboarding HTTP 服务的问题
+- 修复远程 Agent 安装命令访问 `/agent/install/:token.sh` 返回空内容的问题
+- 修复远程 Agent 安装脚本未完成注册流程的问题，补齐最小可用 bootstrap agent
+- 修复远程 Agent 页面样式与现有设置页交互不一致的问题，调整为接近 HTTP 服务设置页的风格
+- 修复全量测试中的既有回归问题，恢复仓库级测试绿灯
+
+## 其他 (Chore)
+
+- 更新包元数据到 fork 仓库 `EwdAger/supatools`
+
+---
+
 # 2.4.1
 
 ## 新功能 (Feat)
