@@ -193,6 +193,16 @@ function normalizeOptionalPath(value: unknown): string | null {
   return resolvePath(value)
 }
 
+/** 规范化快照中的平台/标签元数据，确保注册表持久化值保持 canonical */
+function normalizeManifestSnapshot(snapshot: PluginManifestSnapshot): PluginManifestSnapshot {
+  const { platform, tags } = normalizePluginMetadata(snapshot)
+  return {
+    ...snapshot,
+    platform,
+    tags
+  }
+}
+
 /**
  * 获取按 sortOrder 排序的项目名称列表
  * sortOrder 相同时按 addedAt 倒序（最新优先）兜底
@@ -258,7 +268,7 @@ function parseRegistryEntry(
   return {
     entry: {
       name,
-      configSnapshot: { ...(raw.configSnapshot as PluginManifestSnapshot) },
+      configSnapshot: normalizeManifestSnapshot(raw.configSnapshot as PluginManifestSnapshot),
       addedAt: normalizeTimestamp(raw.addedAt, fallbackTimestamp),
       updatedAt: normalizeTimestamp(raw.updatedAt, fallbackTimestamp),
       sortOrder: -1,
@@ -354,7 +364,7 @@ export function upsertByConfig(options: UpsertByConfigParams): DevProjectMutatio
         ...options.registry.projects,
         [projectName]: {
           name: projectName,
-          configSnapshot: { ...options.pluginConfig },
+          configSnapshot: normalizeManifestSnapshot(options.pluginConfig),
           addedAt: existing?.addedAt ?? ts,
           updatedAt: ts,
           sortOrder: existing?.sortOrder ?? Object.keys(options.registry.projects).length,
@@ -408,7 +418,7 @@ export function rebindByConfig(options: RebindByConfigParams): DevProjectMutatio
         ...options.registry.projects,
         [projectName]: {
           ...existing,
-          configSnapshot: { ...options.pluginConfig },
+          configSnapshot: normalizeManifestSnapshot(options.pluginConfig),
           updatedAt: ts,
           projectPath: resolvePath(path.dirname(normalizedConfigPath)),
           configPath: normalizedConfigPath,

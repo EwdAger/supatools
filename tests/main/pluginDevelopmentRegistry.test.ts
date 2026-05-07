@@ -115,6 +115,61 @@ describe('pluginDevelopmentRegistry', () => {
     expect(entry.configSnapshot.version).toBe('1.0.0')
   })
 
+  it('stores normalized platform and tags in configSnapshot on upsert', () => {
+    const registry = { version: 3, projects: {} }
+
+    const result = upsertByConfig({
+      registry,
+      pluginPath: '/workspace/demo',
+      pluginConfig: {
+        name: 'demo',
+        title: 'Demo',
+        version: '1.0.0',
+        platform: [' Linux ', 'linux', '', 'win32'],
+        tags: ['scp', 'HCI', 'scp', '']
+      }
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.registry.projects.demo.configSnapshot.platform).toEqual(['linux', 'win32'])
+    expect(result.registry.projects.demo.configSnapshot.tags).toEqual(['scp', 'hci'])
+  })
+
+  it('stores normalized platform and tags in configSnapshot on rebind', () => {
+    const registry = {
+      version: 3,
+      projects: {
+        demo: {
+          name: 'demo',
+          configSnapshot: { name: 'demo', version: '0.5.0' },
+          addedAt: '2026-03-29T00:00:00.000Z',
+          updatedAt: '2026-03-29T00:00:00.000Z',
+          sortOrder: 0,
+          projectPath: '/workspace/demo',
+          configPath: '/workspace/demo/plugin.json',
+          status: 'ready',
+          lastValidatedAt: '2026-03-29T00:00:00.000Z'
+        }
+      }
+    }
+
+    const result = rebindByConfig({
+      registry,
+      pluginJsonPath: '/workspace/demo-renamed/plugin.json',
+      pluginConfig: {
+        name: 'demo',
+        title: 'Demo',
+        version: '1.0.0',
+        platform: [' Linux ', 'linux', '', 'win32'],
+        tags: ['scp', 'HCI', 'scp', '']
+      }
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.registry.projects.demo.configSnapshot.platform).toEqual(['linux', 'win32'])
+    expect(result.registry.projects.demo.configSnapshot.tags).toEqual(['scp', 'hci'])
+  })
+
   it('rejects import when plugin configuration lacks name', () => {
     const registry = { version: 3, projects: {} }
 
@@ -209,6 +264,33 @@ describe('pluginDevelopmentRegistry', () => {
     })
 
     expect(Object.keys(registry.projects)).toEqual(['demo'])
+  })
+
+  it('normalizes legacy snapshot platform and tags during registry read', () => {
+    const registry = readDevProjectRegistry({
+      version: 3,
+      projects: {
+        demo: {
+          name: 'demo',
+          configSnapshot: {
+            name: 'demo',
+            title: 'Demo',
+            platform: [' Linux ', 'linux', '', 'win32'],
+            tags: ['scp', 'HCI', 'scp', '']
+          },
+          addedAt: '2026-03-29T00:00:00.000Z',
+          updatedAt: '2026-03-29T01:00:00.000Z',
+          sortOrder: 0,
+          projectPath: '/workspace/demo',
+          configPath: '/workspace/demo/plugin.json',
+          status: 'ready',
+          lastValidatedAt: '2026-03-29T00:00:00.000Z'
+        }
+      }
+    })
+
+    expect(registry.projects.demo.configSnapshot.platform).toEqual(['linux', 'win32'])
+    expect(registry.projects.demo.configSnapshot.tags).toEqual(['scp', 'hci'])
   })
 
   it('falls back to addedAt order when sortOrder is missing', () => {
