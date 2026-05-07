@@ -157,6 +157,13 @@ const VALID_BINDING_STATUSES = new Set<DevProjectBindingStatus>([
 
 /** 标准化路径为绝对路径 */
 function resolvePath(p: string): string {
+  // 在非 Windows 环境下处理 Windows 绝对路径时，path.resolve() 会错误地把 cwd 前缀拼进去。
+  if (/^[A-Za-z]:[\\/]/.test(p)) {
+    return path.win32.normalize(p)
+  }
+  if (/^\\\\/.test(p)) {
+    return path.win32.normalize(p)
+  }
   return path.resolve(p)
 }
 

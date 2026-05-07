@@ -4,6 +4,7 @@ import lmdbInstance from '../../core/lmdb/lmdbInstance'
 import pluginWindowManager from '../../core/pluginWindowManager'
 import {
   getPluginDataPrefix,
+  getPluginSessionPartition,
   isDevelopmentPluginName,
   type PluginDataRecord
 } from '../../../shared/pluginRuntimeNamespace'
@@ -55,6 +56,15 @@ export class DatabaseAPI {
     const pluginName = pluginWindowManager.getPluginNameByWebContentsId(event.sender.id)
     if (pluginName) {
       return getPluginDataPrefix(pluginName)
+    }
+
+    // 3. 如果主视图和插件子窗口映射都没有命中，回退到 Session partition 约定。
+    const partition = (event.sender.session as { partition?: string } | undefined)?.partition
+    if (typeof partition === 'string' && partition.startsWith('persist:')) {
+      const candidatePluginName = partition.slice('persist:'.length)
+      if (partition === getPluginSessionPartition(candidatePluginName)) {
+        return getPluginDataPrefix(candidatePluginName)
+      }
     }
 
     return null

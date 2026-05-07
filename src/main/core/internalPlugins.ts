@@ -13,7 +13,9 @@ export const BUNDLED_INTERNAL_PLUGIN_NAMES = ['setting', 'system'] as const
  */
 export const INTERNAL_API_PLUGIN_NAMES = [
   ...BUNDLED_INTERNAL_PLUGIN_NAMES,
+  'zTools-developer-plugin__dev',
   'ztools-developer-plugin__dev',
+  'zTools-developer-plugin',
   'ztools-developer-plugin'
 ] as const
 

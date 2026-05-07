@@ -1,4 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
+
+vi.mock('../../src/main/core/native/index', () => ({
+  MuiResolver: {
+    resolve: vi.fn(() => new Map())
+  }
+}))
+
 import {
   shouldSkipShortcut,
   getIconUrl,
