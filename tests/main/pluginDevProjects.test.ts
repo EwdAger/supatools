@@ -1,0 +1,166 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const mockDbGet = vi.hoisted(() => vi.fn())
+const mockDbPut = vi.hoisted(() => vi.fn())
+const mockReadFile = vi.hoisted(() => vi.fn())
+const mockWriteFile = vi.hoisted(() => vi.fn())
+
+vi.mock('electron', () => ({
+  dialog: {
+    showOpenDialog: vi.fn(),
+    showSaveDialog: vi.fn()
+  },
+  shell: {
+    showItemInFolder: vi.fn()
+  }
+}))
+
+vi.mock('fs', () => ({
+  promises: {
+    readFile: mockReadFile,
+    writeFile: mockWriteFile,
+    access: vi.fn(),
+    cp: vi.fn(),
+    stat: vi.fn()
+  }
+}))
+
+vi.mock('../../src/main/api/shared/database', () => ({
+  default: {
+    dbGet: mockDbGet,
+    dbPut: mockDbPut
+  }
+}))
+
+vi.mock('../../src/main/core/internalPlugins', () => ({
+  isBundledInternalPlugin: vi.fn(() => false)
+}))
+
+vi.mock('../../src/main/utils/zpxArchive.js', () => ({
+  packZpx: vi.fn()
+}))
+
+import {
+  DEV_PROJECT_REGISTRY_DB_KEY,
+  type DevProjectRegistry
+} from '../../src/main/api/renderer/pluginDevelopmentRegistry'
+import { PluginDevProjectsAPI } from '../../src/main/api/renderer/pluginDevProjects'
+
+function createRegistry(): DevProjectRegistry {
+  return {
+    version: 3,
+    projects: {
+      demo: {
+        name: 'demo',
+        configSnapshot: {
+          name: 'demo',
+          title: 'Demo',
+          tags: [' SCP ', 'scp', '']
+        },
+        addedAt: '2026-04-15T00:00:00.000Z',
+        updatedAt: '2026-04-15T00:00:00.000Z',
+        sortOrder: 0,
+        projectPath: '/workspace/demo',
+        configPath: '/workspace/demo/plugin.json',
+        status: 'ready',
+        lastValidatedAt: '2026-04-15T00:00:00.000Z'
+      }
+    }
+  }
+}
+
+function createApi(): PluginDevProjectsAPI {
+  return new PluginDevProjectsAPI({
+    mainWindow: null,
+    pluginManager: null,
+    readInstalledPlugins: () => [],
+    writeInstalledPlugins: vi.fn(),
+    notifyPluginsChanged: vi.fn(),
+    validatePluginConfig: vi.fn(() => ({ valid: true })),
+    resolvePluginLogo: vi.fn(() => ''),
+    getRunningPlugins: vi.fn(() => [])
+  })
+}
+
+function expectLatestRegistrySnapshot(): { platform?: string[]; tags?: string[] } {
+  const calls = mockDbPut.mock.calls.filter(([key]) => key === DEV_PROJECT_REGISTRY_DB_KEY)
+  const latest = calls.at(-1)?.[1] as DevProjectRegistry | undefined
+  if (!latest) throw new Error('Expected registry write')
+  return latest.projects.demo.configSnapshot
+}
+
+describe('PluginDevProjectsAPI metadata canonicalization', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockDbGet.mockImplementation((key: string) => {
+      if (key === DEV_PROJECT_REGISTRY_DB_KEY) {
+        return createRegistry()
+      }
+      return []
+    })
+    mockWriteFile.mockResolvedValue(undefined)
+  })
+
+  it('persists canonical platform and tags when validating a project', async () => {
+    mockReadFile.mockResolvedValue(
+      JSON.stringify({
+        name: 'demo',
+        title: 'Demo',
+        version: '1.0.0',
+        platform: [' Linux ', 'linux', '', 'win32'],
+        tags: ['scp', 'HCI', 'scp', '']
+      })
+    )
+
+    const api = createApi()
+    const result = await api.validateDevProject('demo')
+
+    expect(result.success).toBe(true)
+    expect(expectLatestRegistrySnapshot()).toMatchObject({
+      platform: ['linux', 'win32'],
+      tags: ['scp', 'hci']
+    })
+  })
+
+  it('persists canonical platform and tags when selecting a replacement config', async () => {
+    mockReadFile.mockResolvedValue(
+      JSON.stringify({
+        name: 'demo',
+        title: 'Demo',
+        version: '1.0.0',
+        platform: [' Linux ', 'linux', '', 'win32'],
+        tags: ['scp', 'HCI', 'scp', '']
+      })
+    )
+
+    const api = createApi()
+    const result = await api.selectDevProjectConfig('demo', '/workspace/demo-next/plugin.json')
+
+    expect(result.success).toBe(true)
+    expect(expectLatestRegistrySnapshot()).toMatchObject({
+      platform: ['linux', 'win32'],
+      tags: ['scp', 'hci']
+    })
+  })
+
+  it('persists canonical platform when updating project metadata', async () => {
+    mockReadFile.mockResolvedValue(
+      JSON.stringify({
+        name: 'demo',
+        title: 'Demo',
+        version: '1.0.0'
+      })
+    )
+
+    const api = createApi()
+    const result = await api.updateDevProjectMeta('demo', {
+      platform: [' Linux ', 'linux', '', 'win32']
+    })
+
+    expect(result.success).toBe(true)
+    expect(expectLatestRegistrySnapshot()).toMatchObject({
+      platform: ['linux', 'win32'],
+      tags: ['scp']
+    })
+  })
+})

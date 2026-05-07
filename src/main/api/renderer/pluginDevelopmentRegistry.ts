@@ -194,7 +194,9 @@ function normalizeOptionalPath(value: unknown): string | null {
 }
 
 /** 规范化快照中的平台/标签元数据，确保注册表持久化值保持 canonical */
-function normalizeManifestSnapshot(snapshot: PluginManifestSnapshot): PluginManifestSnapshot {
+export function normalizePluginManifestSnapshot(
+  snapshot: PluginManifestSnapshot
+): PluginManifestSnapshot {
   const { platform, tags } = normalizePluginMetadata(snapshot)
   return {
     ...snapshot,
@@ -268,7 +270,7 @@ function parseRegistryEntry(
   return {
     entry: {
       name,
-      configSnapshot: normalizeManifestSnapshot(raw.configSnapshot as PluginManifestSnapshot),
+      configSnapshot: normalizePluginManifestSnapshot(raw.configSnapshot as PluginManifestSnapshot),
       addedAt: normalizeTimestamp(raw.addedAt, fallbackTimestamp),
       updatedAt: normalizeTimestamp(raw.updatedAt, fallbackTimestamp),
       sortOrder: -1,
@@ -364,7 +366,7 @@ export function upsertByConfig(options: UpsertByConfigParams): DevProjectMutatio
         ...options.registry.projects,
         [projectName]: {
           name: projectName,
-          configSnapshot: normalizeManifestSnapshot(options.pluginConfig),
+          configSnapshot: normalizePluginManifestSnapshot(options.pluginConfig),
           addedAt: existing?.addedAt ?? ts,
           updatedAt: ts,
           sortOrder: existing?.sortOrder ?? Object.keys(options.registry.projects).length,
@@ -418,7 +420,7 @@ export function rebindByConfig(options: RebindByConfigParams): DevProjectMutatio
         ...options.registry.projects,
         [projectName]: {
           ...existing,
-          configSnapshot: normalizeManifestSnapshot(options.pluginConfig),
+          configSnapshot: normalizePluginManifestSnapshot(options.pluginConfig),
           updatedAt: ts,
           projectPath: resolvePath(path.dirname(normalizedConfigPath)),
           configPath: normalizedConfigPath,
@@ -568,7 +570,7 @@ export function updateProjectMeta(options: UpdateProjectMetaParams): DevProjectM
   const ts = clock()
   const updatedEntry: DevProjectRecord = {
     ...existing,
-    configSnapshot: {
+    configSnapshot: normalizePluginManifestSnapshot({
       ...existing.configSnapshot,
       ...(meta.title ? { title: meta.title } : {}),
       ...(meta.description !== undefined ? { description: meta.description } : {}),
@@ -576,7 +578,7 @@ export function updateProjectMeta(options: UpdateProjectMetaParams): DevProjectM
       ...(Array.isArray(meta.platform) && meta.platform.length > 0
         ? { platform: meta.platform }
         : {})
-    },
+    }),
     updatedAt: ts
   }
 

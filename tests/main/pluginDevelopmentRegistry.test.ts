@@ -6,6 +6,7 @@ import {
   insertDevProjectAtTop,
   rebindByConfig,
   readDevProjectRegistry,
+  updateProjectMeta,
   upsertByConfig,
   validateRepairConfigSelection
 } from '../../src/main/api/renderer/pluginDevelopmentRegistry'
@@ -476,5 +477,38 @@ describe('pluginDevelopmentRegistry', () => {
 
     expect(result.success).toBe(false)
     expect(result.reason).toContain('/workspace/beta-old')
+  })
+
+  it('normalizes platform and tags when updating project metadata', () => {
+    const result = updateProjectMeta({
+      registry: {
+        version: 3,
+        projects: {
+          demo: {
+            name: 'demo',
+            configSnapshot: {
+              name: 'demo',
+              title: 'Demo',
+              tags: [' SCP ', 'scp', '']
+            },
+            addedAt: '2026-03-29T00:00:00.000Z',
+            updatedAt: '2026-03-29T00:00:00.000Z',
+            sortOrder: 0,
+            projectPath: '/workspace/demo',
+            configPath: '/workspace/demo/plugin.json',
+            status: 'ready',
+            lastValidatedAt: '2026-03-29T00:00:00.000Z'
+          }
+        }
+      },
+      projectName: 'demo',
+      meta: {
+        platform: [' Linux ', 'linux', '', 'win32']
+      }
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.registry.projects.demo.configSnapshot.platform).toEqual(['linux', 'win32'])
+    expect(result.registry.projects.demo.configSnapshot.tags).toEqual(['scp'])
   })
 })

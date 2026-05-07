@@ -12,6 +12,7 @@ import {
   buildInstalledDevelopmentPlugin,
   canPackageDevProject,
   insertDevProjectAtTop,
+  normalizePluginManifestSnapshot,
   readDevProjectRegistry,
   rebindByConfig,
   updateProjectMeta,
@@ -201,7 +202,9 @@ export class PluginDevProjectsAPI {
       status: validationStatus,
       lastValidatedAt: now,
       ...(lastError ? { lastError } : {}),
-      ...(pluginConfig ? { configSnapshot: { ...pluginConfig }, updatedAt: now } : {})
+      ...(pluginConfig
+        ? { configSnapshot: normalizePluginManifestSnapshot(pluginConfig), updatedAt: now }
+        : {})
     }
     if (!lastError && 'lastError' in nextEntry) {
       delete nextEntry.lastError
@@ -676,7 +679,7 @@ export class PluginDevProjectsAPI {
           ...registry.projects,
           [projectName]: {
             ...registryItem,
-            configSnapshot: { ...selectedConfig },
+            configSnapshot: normalizePluginManifestSnapshot(selectedConfig),
             configPath,
             projectPath: path.dirname(configPath),
             status: 'ready',
