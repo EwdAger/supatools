@@ -305,6 +305,7 @@ export class PluginDevProjectsAPI {
           platform: Array.isArray(project.configSnapshot.platform)
             ? project.configSnapshot.platform
             : [],
+          tags: Array.isArray(project.configSnapshot.tags) ? project.configSnapshot.tags : [],
           developmentMain: project.configSnapshot.development?.main,
           path: projectPath,
           configPath: project.configPath || null,
@@ -911,8 +912,11 @@ export class PluginDevProjectsAPI {
         try {
           originalPluginJsonContent = await fs.readFile(pluginJsonPath, 'utf-8')
           const config = JSON.parse(originalPluginJsonContent)
-          config.version = version
-          await fs.writeFile(pluginJsonPath, JSON.stringify(config, null, 2), 'utf-8')
+          const normalizedManifest = normalizePluginManifestSnapshot({
+            ...config,
+            version
+          })
+          await fs.writeFile(pluginJsonPath, JSON.stringify(normalizedManifest, null, 2), 'utf-8')
         } catch {
           return { success: false, error: '修改 plugin.json 版本号失败' }
         }

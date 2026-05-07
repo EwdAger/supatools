@@ -43,11 +43,13 @@ vi.mock('../../src/main/utils/zpxArchive.js', () => ({
   packZpx: vi.fn()
 }))
 
+import { dialog } from 'electron'
 import {
   DEV_PROJECT_REGISTRY_DB_KEY,
   type DevProjectRegistry
 } from '../../src/main/api/renderer/pluginDevelopmentRegistry'
 import { PluginDevProjectsAPI } from '../../src/main/api/renderer/pluginDevProjects'
+import { packZpx } from '../../src/main/utils/zpxArchive.js'
 
 function createRegistry(): DevProjectRegistry {
   return {
@@ -58,6 +60,7 @@ function createRegistry(): DevProjectRegistry {
         configSnapshot: {
           name: 'demo',
           title: 'Demo',
+          platform: [' Linux ', 'linux', '', 'win32'],
           tags: [' SCP ', 'scp', '']
         },
         addedAt: '2026-04-15T00:00:00.000Z',
@@ -132,6 +135,20 @@ describe('PluginDevProjectsAPI metadata canonicalization', () => {
       platform: ['linux', 'win32'],
       tags: ['scp', 'hci']
     })
+  })
+
+  it('includes canonical tags in getDevProjects output', async () => {
+    const api = createApi()
+
+    const result = await api.getDevProjects()
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        name: 'demo',
+        platform: ['linux', 'win32'],
+        tags: ['scp']
+      })
+    ])
   })
 
   it('persists canonical platform and tags when selecting a replacement config', async () => {
@@ -230,6 +247,33 @@ describe('PluginDevProjectsAPI metadata canonicalization', () => {
       description: 'Example',
       author: 'Alice',
       platform: ['linux', 'win32']
+    })
+  })
+
+  it('writes canonical platform and tags when overriding version for packaging', async () => {
+    mockReadFile.mockResolvedValue(
+      JSON.stringify({
+        name: 'demo',
+        title: 'Demo',
+        version: '1.0.0',
+        platform: [' Linux ', 'linux', '', 'win32'],
+        tags: ['scp', 'HCI', 'scp', '']
+      })
+    )
+    vi.mocked(dialog.showSaveDialog).mockResolvedValue({
+      canceled: false,
+      filePath: '/tmp/demo-v2.0.0.zpx'
+    } as any)
+    vi.mocked(packZpx).mockResolvedValue(undefined as any)
+
+    const api = createApi()
+    const result = await api.packageDevProject('demo', undefined, '2.0.0')
+
+    expect(result.success).toBe(true)
+    expect(JSON.parse(findWriteCall('/workspace/demo/plugin.json'))).toMatchObject({
+      version: '2.0.0',
+      platform: ['linux', 'win32'],
+      tags: ['scp', 'hci']
     })
   })
 })
