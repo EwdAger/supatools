@@ -4,6 +4,9 @@ const mockDbGet = vi.hoisted(() => vi.fn())
 const mockDbPut = vi.hoisted(() => vi.fn())
 const mockReadFile = vi.hoisted(() => vi.fn())
 const mockWriteFile = vi.hoisted(() => vi.fn())
+const mockAccess = vi.hoisted(() => vi.fn())
+const mockCp = vi.hoisted(() => vi.fn())
+const mockStat = vi.hoisted(() => vi.fn())
 
 vi.mock('electron', () => ({
   dialog: {
@@ -19,9 +22,9 @@ vi.mock('fs', () => ({
   promises: {
     readFile: mockReadFile,
     writeFile: mockWriteFile,
-    access: vi.fn(),
-    cp: vi.fn(),
-    stat: vi.fn()
+    access: mockAccess,
+    cp: mockCp,
+    stat: mockStat
   }
 }))
 
@@ -89,6 +92,12 @@ function expectLatestRegistrySnapshot(): { platform?: string[]; tags?: string[] 
   return latest.projects.demo.configSnapshot
 }
 
+function findWriteCall(targetPath: string): string {
+  const call = mockWriteFile.mock.calls.find(([filePath]) => filePath === targetPath)
+  if (!call) throw new Error(`Expected writeFile call for ${targetPath}`)
+  return call[1] as string
+}
+
 describe('PluginDevProjectsAPI metadata canonicalization', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -98,6 +107,9 @@ describe('PluginDevProjectsAPI metadata canonicalization', () => {
       }
       return []
     })
+    mockAccess.mockResolvedValue(undefined)
+    mockCp.mockResolvedValue(undefined)
+    mockStat.mockResolvedValue(null)
     mockWriteFile.mockResolvedValue(undefined)
   })
 
@@ -161,6 +173,63 @@ describe('PluginDevProjectsAPI metadata canonicalization', () => {
     expect(expectLatestRegistrySnapshot()).toMatchObject({
       platform: ['linux', 'win32'],
       tags: ['scp']
+    })
+    expect(JSON.parse(findWriteCall('/workspace/demo/plugin.json'))).toMatchObject({
+      platform: ['linux', 'win32']
+    })
+  })
+
+  it('writes canonical platform to scaffolded public/plugin.json', async () => {
+    mockReadFile.mockImplementation(async (filePath: string) => {
+      if (filePath === '/workspace/demo/public/plugin.json') {
+        return JSON.stringify({
+          name: '{{PLUGIN_NAME}}',
+          title: '{{PLUGIN_TITLE}}',
+          description: '{{DESCRIPTION}}',
+          author: '{{AUTHOR}}'
+        })
+      }
+      if (filePath === '/workspace/demo/package.json') {
+        return JSON.stringify({
+          name: '{{PROJECT_NAME}}',
+          description: '{{DESCRIPTION}}'
+        })
+      }
+      throw new Error(`Unexpected read: ${filePath}`)
+    })
+
+    const api = new PluginDevProjectsAPI({
+      mainWindow: null,
+      pluginManager: null,
+      readInstalledPlugins: () => [{ name: 'ztools-developer-plugin__dev', path: '/developer' }],
+      writeInstalledPlugins: vi.fn(),
+      notifyPluginsChanged: vi.fn(),
+      validatePluginConfig: vi.fn(() => ({ valid: true })),
+      resolvePluginLogo: vi.fn(() => ''),
+      getRunningPlugins: vi.fn(() => [])
+    })
+    ;(api as any).upsertDevProjectByConfigPath = vi.fn().mockResolvedValue({
+      success: true,
+      pluginName: 'demo'
+    })
+
+    const result = await api.scaffoldDevProject({
+      template: 'vue-vite',
+      projectPath: '/workspace',
+      name: 'demo',
+      title: 'Demo',
+      description: 'Example',
+      author: 'Alice',
+      platform: [' Linux ', 'linux', '', 'win32']
+    })
+
+    expect(result.success).toBe(true)
+    expect(JSON.parse(findWriteCall('/workspace/demo/public/plugin.json'))).toMatchObject({
+      name: 'demo',
+      title: 'Demo',
+      description: 'Example',
+      author: 'Alice',
+      platform: ['linux', 'win32']
     })
   })
 })

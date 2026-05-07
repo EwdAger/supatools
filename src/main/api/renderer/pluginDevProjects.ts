@@ -724,12 +724,14 @@ export class PluginDevProjectsAPI {
         try {
           const raw = await fs.readFile(entry.configPath, 'utf-8')
           const parsed = JSON.parse(raw)
-          if (meta.title !== undefined) parsed.title = meta.title
-          if (meta.description !== undefined) parsed.description = meta.description
-          if (meta.author !== undefined) parsed.author = meta.author
-          if (Array.isArray(meta.platform) && meta.platform.length > 0) {
-            parsed.platform = meta.platform
+          const normalizedSnapshot = normalizePluginManifestSnapshot(entry.configSnapshot)
+          if (normalizedSnapshot.title !== undefined) parsed.title = normalizedSnapshot.title
+          if (normalizedSnapshot.description !== undefined) {
+            parsed.description = normalizedSnapshot.description
           }
+          if (normalizedSnapshot.author !== undefined) parsed.author = normalizedSnapshot.author
+          parsed.platform = normalizedSnapshot.platform
+          parsed.tags = normalizedSnapshot.tags
           await fs.writeFile(entry.configPath, JSON.stringify(parsed, null, 2), 'utf-8')
         } catch (err) {
           console.warn('[DevProjects] 同步 plugin.json 失败:', err)
@@ -810,12 +812,12 @@ export class PluginDevProjectsAPI {
           .replace(/\{\{PLUGIN_TITLE\}\}/g, title)
           .replace(/\{\{DESCRIPTION\}\}/g, description || '')
           .replace(/\{\{AUTHOR\}\}/g, author || '')
-        // 注入 platform
-        if (Array.isArray(platform) && platform.length > 0) {
-          const parsed = JSON.parse(pluginJson)
-          parsed.platform = platform
-          pluginJson = JSON.stringify(parsed, null, 2)
-        }
+        const parsed = JSON.parse(pluginJson)
+        const normalizedManifest = normalizePluginManifestSnapshot({
+          ...parsed,
+          ...(Array.isArray(platform) ? { platform } : {})
+        })
+        pluginJson = JSON.stringify(normalizedManifest, null, 2)
         await fs.writeFile(pluginJsonPath, pluginJson, 'utf-8')
       } catch (err) {
         console.warn('[DevProjects] 替换 plugin.json 占位符失败:', err)
