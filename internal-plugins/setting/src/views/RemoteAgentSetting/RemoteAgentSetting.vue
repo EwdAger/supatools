@@ -27,6 +27,18 @@ const selectedAgent = computed(() => {
   return agents.value.find((agent) => agent.id === selectedAgentId.value) || null
 })
 
+const selectedAgentStatusText = computed(() => {
+  if (!selectedAgent.value) return '未选择远程机器'
+  const statusMap: Record<string, string> = {
+    pending: '等待远程机器执行安装命令',
+    onboarding: '远程 Agent 接入中',
+    online: '远程 Agent 在线',
+    offline: '远程 Agent 离线',
+    error: '远程 Agent 异常'
+  }
+  return statusMap[selectedAgent.value.status] || selectedAgent.value.status
+})
+
 const deployableRows = computed(() => {
   if (!selectedAgent.value) return []
   return buildDeployablePluginRows(plugins.value, selectedAgent.value)
@@ -45,6 +57,20 @@ function buildTagPolicy(): TagPolicy {
     .filter(Boolean)
 
   return { mode: 'allow_list', tags }
+}
+
+function updateInstallCommandForSelection(): void {
+  if (
+    selectedAgent.value &&
+    selectedAgent.value.status === 'pending' &&
+    selectedAgent.value.onboardingToken &&
+    selectedAgent.value.selectedLocalAddress
+  ) {
+    installCommand.value = `curl -fsSL http://${selectedAgent.value.selectedLocalAddress}:37121/agent/install/${selectedAgent.value.onboardingToken}.sh | sh`
+    return
+  }
+
+  installCommand.value = ''
 }
 
 async function loadPage(): Promise<void> {
@@ -66,6 +92,8 @@ async function loadPage(): Promise<void> {
     if (!selectedAgentId.value && agentList.length > 0) {
       selectedAgentId.value = agentList[0].id
     }
+
+    updateInstallCommandForSelection()
   } catch (err) {
     console.error('加载远程 Agent 页面失败:', err)
     error('加载远程 Agent 页面失败')
@@ -109,13 +137,13 @@ async function createAgent(): Promise<void> {
     return
   }
 
-  installCommand.value = result.installCommand || ''
   createForm.value.name = ''
   createForm.value.tagInput = ''
   await loadPage()
   if (result.record?.id) {
     selectedAgentId.value = result.record.id
   }
+  updateInstallCommandForSelection()
   success('安装命令已生成')
 }
 
@@ -132,8 +160,8 @@ async function regenerateInstallCommand(): Promise<void> {
     return
   }
 
-  installCommand.value = result.installCommand || ''
   await loadPage()
+  updateInstallCommandForSelection()
   success('安装命令已重新生成')
 }
 
@@ -189,6 +217,7 @@ async function syncSelectedAgent(): Promise<void> {
 }
 
 watch(selectedAgentId, async () => {
+  updateInstallCommandForSelection()
   await loadSyncJobs()
   selectedPluginName.value = availablePlugins.value[0]?.name || ''
 })
@@ -209,103 +238,129 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="content-panel remote-agent-page">
-    <div class="page-header">
-      <div>
-        <h2 class="section-title">远程 Agent</h2>
-        <p class="section-desc">管理 Linux 远程机器、安装命令和插件同步</p>
-      </div>
-      <button class="btn btn-primary" @click="loadPage">刷新</button>
-    </div>
+  <div class="content-panel">
+    <h2 class="section-title">远程 Agent</h2>
+    <p class="section-desc">管理 Linux 远程机器、安装命令和插件同步</p>
 
     <div class="page-grid">
-      <section class="left-panel card">
-        <h3 class="card-title">新增机器</h3>
-        <div class="form-grid">
-          <label class="field">
-            <span class="field-label">机器名称</span>
+      <div class="left-column">
+        <div class="service-config">
+          <div class="setting-item vertical">
+            <label class="setting-label">
+              <span>机器名称</span>
+              <span class="setting-desc">用于区分不同 Linux 远程机器</span>
+            </label>
             <input v-model="createForm.name" class="input" type="text" placeholder="Workshop Linux" />
-          </label>
+          </div>
 
-          <label class="field">
-            <span class="field-label">本机发布地址</span>
+          <div class="setting-item vertical">
+            <label class="setting-label">
+              <span>本机发布地址</span>
+              <span class="setting-desc">远程机器需要能访问这个局域网地址</span>
+            </label>
             <select v-model="createForm.selectedLocalAddress" class="input">
               <option disabled value="">请选择局域网地址</option>
               <option v-for="address in localAddresses" :key="address" :value="address">
                 {{ address }}
               </option>
             </select>
-          </label>
+          </div>
 
-          <label class="field">
-            <span class="field-label">标签策略</span>
+          <div class="setting-item vertical">
+            <label class="setting-label">
+              <span>标签策略</span>
+              <span class="setting-desc">控制这台机器可接收哪些插件标签</span>
+            </label>
             <select v-model="createForm.tagMode" class="input">
               <option value="allow_all">全部标签</option>
               <option value="allow_list">仅允许指定标签</option>
             </select>
-          </label>
+          </div>
 
-          <label v-if="createForm.tagMode === 'allow_list'" class="field">
-            <span class="field-label">允许标签</span>
+          <div v-if="createForm.tagMode === 'allow_list'" class="setting-item vertical">
+            <label class="setting-label">
+              <span>允许标签</span>
+              <span class="setting-desc">使用逗号分隔，例如 `scp,hci`</span>
+            </label>
             <input
               v-model="createForm.tagInput"
               class="input"
               type="text"
               placeholder="scp,hci"
             />
-          </label>
+          </div>
+
+          <button class="btn btn-primary create-btn" @click="createAgent">生成安装命令</button>
         </div>
 
-        <button class="btn btn-primary create-btn" @click="createAgent">生成安装命令</button>
-
-        <h3 class="card-title machine-title">机器列表</h3>
-        <div class="machine-list">
-          <button
-            v-for="agent in agents"
-            :key="agent.id"
-            class="machine-item"
-            :class="{ active: agent.id === selectedAgentId }"
-            @click="selectedAgentId = agent.id"
-          >
-            <div class="machine-top">
-              <span class="machine-name">{{ agent.name }}</span>
-              <span class="status-pill" :class="`status-${agent.status}`">{{ agent.status }}</span>
-            </div>
-            <div class="machine-meta">{{ agent.platform }} · {{ agent.selectedLocalAddress }}</div>
-          </button>
+        <div class="machine-panel">
+          <h3 class="panel-title">机器列表</h3>
+          <div class="machine-list">
+            <button
+              v-for="agent in agents"
+              :key="agent.id"
+              class="machine-item"
+              :class="{ active: agent.id === selectedAgentId }"
+              @click="selectedAgentId = agent.id"
+            >
+              <div class="machine-top">
+                <span class="machine-name">{{ agent.name }}</span>
+                <span class="status-pill" :class="`status-${agent.status}`">{{ agent.status }}</span>
+              </div>
+              <div class="machine-meta">{{ agent.platform }} · {{ agent.selectedLocalAddress }}</div>
+            </button>
+          </div>
         </div>
-      </section>
+      </div>
 
-      <section class="right-panel card">
+      <div class="right-column">
         <template v-if="selectedAgent">
-          <div class="detail-header">
-            <div>
-              <h3 class="card-title">{{ selectedAgent.name }}</h3>
-              <p class="detail-meta">
-                {{ selectedAgent.platform }} · {{ selectedAgent.selectedLocalAddress }}
-              </p>
+          <div class="status-bar">
+            <span class="status-dot" :class="{ active: selectedAgent.status === 'online' }"></span>
+            <span class="status-text">{{ selectedAgentStatusText }}</span>
+          </div>
+
+          <div class="service-config">
+            <div class="setting-item vertical">
+              <label class="setting-label">
+                <span>安装命令</span>
+                <span class="setting-desc">在远程 Linux 机器执行这条命令完成接入</span>
+              </label>
+              <textarea
+                :value="installCommand"
+                class="command-box"
+                rows="5"
+                readonly
+                placeholder="生成远程机器后会在这里显示 curl 命令"
+              ></textarea>
+              <div class="action-row">
+                <button class="btn" @click="regenerateInstallCommand">重生成命令</button>
+                <button class="btn btn-primary btn-sm" @click="copyInstallCommand">复制命令</button>
+              </div>
             </div>
-            <div class="detail-actions">
-              <button class="btn" @click="regenerateInstallCommand">重生成命令</button>
-              <button class="btn btn-primary" @click="syncSelectedAgent">同步插件</button>
+
+            <div class="setting-item vertical">
+              <label class="setting-label">
+                <span>单插件运行前配置</span>
+                <span class="setting-desc">先保存配置，再执行远程同步</span>
+              </label>
+              <select v-model="selectedPluginName" class="input">
+                <option disabled value="">请选择插件</option>
+                <option v-for="row in availablePlugins" :key="row.name" :value="row.name">
+                  {{ row.name }}
+                </option>
+              </select>
+              <textarea v-model="pluginConfigText" class="command-box config-box" rows="8"></textarea>
+              <div class="action-row">
+                <button class="btn btn-primary btn-sm" @click="savePluginConfig">保存配置</button>
+                <button class="btn btn-primary" @click="syncSelectedAgent">同步插件</button>
+              </div>
             </div>
           </div>
 
-          <div class="install-panel">
-            <span class="field-label">安装命令</span>
-            <textarea
-              :value="installCommand"
-              class="command-box"
-              rows="4"
-              readonly
-              placeholder="生成远程机器后会在这里显示 curl 命令"
-            ></textarea>
-            <button class="btn btn-primary btn-sm" @click="copyInstallCommand">复制命令</button>
-          </div>
-
-          <div class="deployable-panel">
+          <div class="api-docs">
             <div class="panel-heading">
-              <h4 class="sub-title">可部署插件</h4>
+              <h3 class="docs-title">可部署插件</h3>
               <span class="panel-count">{{ deployableRows.length }}</span>
             </div>
             <div class="plugin-list">
@@ -328,27 +383,17 @@ onMounted(() => {
             </div>
           </div>
 
-          <div class="config-panel">
+          <div class="api-docs">
             <div class="panel-heading">
-              <h4 class="sub-title">单插件运行前配置</h4>
-            </div>
-            <select v-model="selectedPluginName" class="input">
-              <option disabled value="">请选择插件</option>
-              <option v-for="row in availablePlugins" :key="row.name" :value="row.name">
-                {{ row.name }}
-              </option>
-            </select>
-            <textarea v-model="pluginConfigText" class="command-box config-box" rows="8"></textarea>
-            <button class="btn btn-primary btn-sm" @click="savePluginConfig">保存配置</button>
-          </div>
-
-          <div class="jobs-panel">
-            <div class="panel-heading">
-              <h4 class="sub-title">最近同步日志</h4>
+              <h3 class="docs-title">最近同步日志</h3>
             </div>
             <div v-if="syncJobs.length === 0" class="empty-state">暂无同步日志</div>
             <div v-else class="job-list">
-              <div v-for="job in syncJobs" :key="`${job.startedAt}-${job.pluginName}-${job.action}`" class="job-item">
+              <div
+                v-for="job in syncJobs"
+                :key="`${job.startedAt}-${job.pluginName}-${job.action}`"
+                class="job-item"
+              >
                 <strong>{{ job.pluginName }}</strong>
                 <span>{{ job.action }}</span>
                 <span :class="['job-status', job.status]">{{ job.status }}</span>
@@ -359,7 +404,7 @@ onMounted(() => {
         </template>
 
         <div v-else class="empty-state">先在左侧创建或选择一台远程机器</div>
-      </section>
+      </div>
     </div>
   </div>
 </template>
@@ -368,110 +413,97 @@ onMounted(() => {
 .content-panel {
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 20px;
   background: var(--bg-color);
-}
-
-.remote-agent-page {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.page-header,
-.detail-header,
-.panel-heading,
-.machine-top,
-.plugin-main,
-.job-item,
-.detail-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.section-title,
-.card-title,
-.sub-title {
-  margin: 0;
-  color: var(--text-color);
 }
 
 .section-title {
   font-size: 20px;
   font-weight: 600;
+  color: var(--text-color);
+  margin: 0 0 8px 0;
 }
 
-.section-desc,
-.detail-meta,
-.machine-meta,
-.plugin-tags,
-.job-message {
-  color: var(--text-secondary);
-}
-
-.section-desc,
-.detail-meta {
-  margin: 6px 0 0 0;
+.section-desc {
   font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 24px 0;
 }
 
 .page-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: 24px;
 }
 
-.card {
-  border: 1px solid var(--divider-color);
-  border-radius: 16px;
-  padding: 18px;
-  background: color-mix(in srgb, var(--bg-color) 80%, white 20%);
+.left-column,
+.right-column {
+  min-width: 0;
 }
 
-.form-grid,
-.deployable-panel,
-.config-panel,
-.jobs-panel,
-.install-panel {
+.service-config {
+  padding-top: 8px;
+}
+
+.setting-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.setting-item.vertical {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.setting-label {
+  font-size: 14px;
+  color: var(--text-color);
+  font-weight: 500;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 4px;
 }
 
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.field-label {
+.setting-desc {
   font-size: 12px;
-  font-weight: 600;
   color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-weight: 400;
 }
 
 .input,
 .command-box {
   width: 100%;
   border: 1px solid var(--divider-color);
-  border-radius: 12px;
+  border-radius: 10px;
   padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.72);
-  color: var(--text-color);
   box-sizing: border-box;
+  background: var(--card-bg);
+  color: var(--text-color);
 }
 
 .command-box {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
   resize: vertical;
 }
 
-.machine-title {
-  margin-top: 20px;
+.create-btn {
+  margin-top: 8px;
+}
+
+.machine-panel {
+  margin-top: 24px;
+}
+
+.panel-title,
+.docs-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-color);
+  margin: 0 0 12px 0;
 }
 
 .machine-list,
@@ -479,16 +511,18 @@ onMounted(() => {
 .job-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .machine-item,
 .plugin-item,
 .job-item {
+  width: 100%;
   border: 1px solid var(--divider-color);
-  border-radius: 12px;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.6);
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-sizing: border-box;
+  background: var(--card-bg);
   text-align: left;
 }
 
@@ -497,14 +531,33 @@ onMounted(() => {
 }
 
 .machine-item.active {
-  border-color: var(--primary-color, #2563eb);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-color, #2563eb) 50%, transparent);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-color) 45%, transparent);
+}
+
+.machine-top,
+.plugin-main,
+.panel-heading,
+.job-item,
+.action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .machine-name,
-.panel-count,
-.plugin-version {
+.plugin-version,
+.panel-count {
   color: var(--text-color);
+}
+
+.machine-meta,
+.plugin-tags,
+.job-message {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .status-pill,
@@ -515,9 +568,7 @@ onMounted(() => {
   padding: 2px 8px;
 }
 
-.status-pending,
-.job-status.error,
-.plugin-state.excluded {
+.status-pending {
   background: rgba(245, 158, 11, 0.16);
   color: #b45309;
 }
@@ -529,22 +580,59 @@ onMounted(() => {
 }
 
 .status-offline,
-.status-error {
+.status-error,
+.job-status.error,
+.plugin-state.excluded {
   background: rgba(239, 68, 68, 0.16);
   color: #b91c1c;
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 10px 14px;
+  background: var(--hover-bg);
+  border-radius: 8px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+}
+
+.status-dot.active {
+  background: var(--success-color, #34c759);
+  box-shadow: 0 0 6px var(--success-color, #34c759);
+}
+
+.status-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.api-docs {
+  margin-top: 20px;
+  padding: 20px;
+  background: var(--hover-bg);
+  border-radius: 10px;
+}
+
+.action-row {
+  width: 100%;
+  justify-content: flex-end;
+}
+
+.config-box {
+  min-height: 180px;
 }
 
 .empty-state {
   color: var(--text-secondary);
   padding: 24px 0;
-}
-
-.create-btn {
-  margin-top: 4px;
-}
-
-.config-box {
-  min-height: 180px;
 }
 
 @media (max-width: 960px) {

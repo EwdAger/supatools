@@ -3,6 +3,7 @@ import type { RemoteAgentTagPolicy } from '../../../shared/remoteAgent'
 export type DeployablePlugin = {
   name: string
   version: string
+  path?: string
   platform?: string[]
   tags?: string[]
 }

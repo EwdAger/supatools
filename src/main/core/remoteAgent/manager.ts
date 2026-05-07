@@ -1,8 +1,12 @@
 import { randomBytes, randomUUID } from 'crypto'
+import { promises as fs } from 'fs'
+import os from 'os'
+import path from 'path'
 import databaseAPI from '../../api/shared/database'
 import {
   createEmptyRemoteAgentsDoc,
-  createPendingRemoteAgent
+  createPendingRemoteAgent,
+  markRemoteAgentOnline
 } from './store'
 import {
   type DeployablePlugin,
@@ -42,9 +46,14 @@ function isRemoteAgentRecord(value: unknown): value is RemoteAgentRecord {
 }
 
 export class RemoteAgentManager {
-  private onboardingService = new RemoteAgentOnboardingService(DEFAULT_ONBOARDING_PORT)
+  private onboardingService = new RemoteAgentOnboardingService(DEFAULT_ONBOARDING_PORT, {
+    findPendingRecordByToken: (token) => this.findPendingRecordByToken(token),
+    registerRemoteAgent: async (payload) => await this.registerRemoteAgent(payload)
+  })
 
-  public init(): void {}
+  public init(): void {
+    void this.refreshOnboardingService()
+  }
 
   public async listRemoteAgents(): Promise<RemoteAgentRecord[]> {
     return this.readAgentsDoc().items
@@ -60,6 +69,7 @@ export class RemoteAgentManager {
     const onboardingInput = this.buildOnboardingInput(input)
     const nextDoc = createPendingRemoteAgent(this.readAgentsDoc(), onboardingInput)
     this.writeAgentsDoc(nextDoc)
+    await this.refreshOnboardingService()
 
     const record = this.requirePendingRecord(nextDoc, onboardingInput.id)
     return {
@@ -87,6 +97,7 @@ export class RemoteAgentManager {
 
     const nextDoc = createPendingRemoteAgent(this.readAgentsDoc(), onboardingInput)
     this.writeAgentsDoc(nextDoc)
+    await this.refreshOnboardingService()
 
     const record = this.requirePendingRecord(nextDoc, machineId)
     return {
@@ -139,14 +150,22 @@ export class RemoteAgentManager {
       })
 
       for (const plugin of plan.install) {
-        await this.runSyncAction(machine.id, plugin.name, 'install', () =>
-          client.installPlugin({ name: plugin.name, version: plugin.version })
+        await this.runSyncAction(machine.id, plugin.name, 'install', async () =>
+          client.installPlugin({
+            name: plugin.name,
+            version: plugin.version,
+            packageData: await this.packagePluginForRemote(plugin)
+          })
         )
       }
 
       for (const plugin of plan.upgrade) {
-        await this.runSyncAction(machine.id, plugin.name, 'upgrade', () =>
-          client.installPlugin({ name: plugin.name, version: plugin.version })
+        await this.runSyncAction(machine.id, plugin.name, 'upgrade', async () =>
+          client.installPlugin({
+            name: plugin.name,
+            version: plugin.version,
+            packageData: await this.packagePluginForRemote(plugin)
+          })
         )
       }
 
@@ -188,7 +207,7 @@ export class RemoteAgentManager {
   }
 
   private buildInstallCommand(record: PendingRemoteAgentRecord): string {
-    return `curl -fsSL http://${record.selectedLocalAddress}:${DEFAULT_ONBOARDING_PORT}/agent/install/${record.onboardingToken}.sh | sh`
+    return `curl -fsSL http://${record.selectedLocalAddress}:${this.onboardingService.getPort()}/agent/install/${record.onboardingToken}.sh | sh`
   }
 
   private buildOnboardingInput(
@@ -221,6 +240,51 @@ export class RemoteAgentManager {
     databaseAPI.dbPut(REMOTE_AGENTS_DB_KEY, doc)
   }
 
+  private findPendingRecordByToken(token: string): PendingRemoteAgentRecord | null {
+    const doc = this.readAgentsDoc()
+    const record = doc.items.find(
+      (item) =>
+        item.status === 'pending' &&
+        item.onboardingToken === token &&
+        item.onboardingExpiresAt &&
+        new Date(item.onboardingExpiresAt).getTime() > Date.now()
+    )
+    if (!record) return null
+    return record as PendingRemoteAgentRecord
+  }
+
+  private async registerRemoteAgent(
+    payload: {
+      token: string
+      machineId: string
+      agentBaseUrl: string
+      agentVersion: string
+      lastSeenAt: string
+    }
+  ): Promise<{ success: boolean; error?: string }> {
+    const doc = this.readAgentsDoc()
+    const record = doc.items.find((item) => item.id === payload.machineId)
+    if (
+      !record ||
+      record.status !== 'pending' ||
+      record.onboardingToken !== payload.token ||
+      !record.onboardingExpiresAt ||
+      new Date(record.onboardingExpiresAt).getTime() <= Date.now()
+    ) {
+      return { success: false, error: 'invalid or expired onboarding token' }
+    }
+
+    const nextDoc = markRemoteAgentOnline(doc, {
+      id: payload.machineId,
+      agentBaseUrl: payload.agentBaseUrl,
+      agentVersion: payload.agentVersion,
+      lastSeenAt: payload.lastSeenAt
+    })
+    this.writeAgentsDoc(nextDoc)
+    await this.refreshOnboardingService()
+    return { success: true }
+  }
+
   private requireMachine(machineId: string): RemoteAgentRecord {
     const machine = this.readAgentsDoc().items.find((item) => item.id === machineId)
     if (!machine) {
@@ -251,7 +315,8 @@ export class RemoteAgentManager {
         !!item &&
         typeof item === 'object' &&
         typeof (item as DeployablePlugin).name === 'string' &&
-        typeof (item as DeployablePlugin).version === 'string'
+        typeof (item as DeployablePlugin).version === 'string' &&
+        typeof (item as { path?: string }).path === 'string'
     )
   }
 
@@ -300,6 +365,44 @@ export class RemoteAgentManager {
     const jobs = this.readSyncJobs()
     jobs.push(job)
     this.writeSyncJobs(jobs)
+  }
+
+  private async refreshOnboardingService(): Promise<void> {
+    const hasPending = this.readAgentsDoc().items.some(
+      (item) =>
+        item.status === 'pending' &&
+        !!item.onboardingToken &&
+        !!item.onboardingExpiresAt &&
+        new Date(item.onboardingExpiresAt).getTime() > Date.now()
+    )
+
+    if (hasPending) {
+      await this.onboardingService.start()
+      return
+    }
+
+    if (this.onboardingService.isRunning()) {
+      await this.onboardingService.stop()
+    }
+  }
+
+  private async packagePluginForRemote(plugin: DeployablePlugin): Promise<string> {
+    const pluginPath = (plugin as { path?: string }).path
+    if (!pluginPath) {
+      throw new Error(`plugin ${plugin.name} has no local path`)
+    }
+
+    const { packZpx } = await import('../../utils/zpxArchive.js')
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ztools-remote-agent-'))
+    const archivePath = path.join(tempDir, `${plugin.name}.zpx`)
+
+    try {
+      await packZpx(pluginPath, archivePath)
+      const buffer = await fs.readFile(archivePath)
+      return buffer.toString('base64')
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true })
+    }
   }
 }
 

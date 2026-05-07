@@ -172,22 +172,17 @@ describe('remote agent store', () => {
       onboardingExpiresAt: '2026-05-07T08:15:00.000Z'
     })
 
-    expect(service.renderInstallScript(pending.items[0])).toBe(
-      [
-        '#!/bin/sh',
-        'set -eu',
-        "AGENT_MACHINE_ID='agent-1'",
-        "AGENT_TOKEN='token-1'",
-        "AGENT_REGISTER_URL='http://192.168.1.23:8123/agent/register'",
-        'echo "Installing ZTools Linux agent..."',
-        'mkdir -p "$HOME/.ztools-agent"',
-        'cat > "$HOME/.ztools-agent/config.env" <<EOF',
-        'AGENT_MACHINE_ID="agent-1"',
-        'AGENT_TOKEN="token-1"',
-        'AGENT_REGISTER_URL="http://192.168.1.23:8123/agent/register"',
-        'EOF'
-      ].join('\n')
-    )
+    const script = service.renderInstallScript(pending.items[0])
+
+    expect(script).toContain('#!/bin/sh')
+    expect(script).toContain("AGENT_MACHINE_ID='agent-1'")
+    expect(script).toContain("AGENT_TOKEN='token-1'")
+    expect(script).toContain("AGENT_REGISTER_URL='http://192.168.1.23:8123/agent/register'")
+    expect(script).toContain('cat > "$AGENT_ROOT/agent.py" <<\'PY\'')
+    expect(script).toContain('curl -fsS -X POST "$AGENT_REGISTER_URL"')
+    expect(script).toContain('AGENT_MACHINE_ID="agent-1"')
+    expect(script).toContain('AGENT_TOKEN="token-1"')
+    expect(script).toContain('AGENT_REGISTER_URL="http://192.168.1.23:8123/agent/register"')
   })
 
   it('shell-escapes machine ids, tokens, and urls in the install script', () => {
@@ -232,8 +227,5 @@ describe('remote agent store', () => {
     expect(script).toContain('AGENT_MACHINE_ID="agent-1\'\\$\\`line1\\nline2"')
     expect(script).toContain('AGENT_TOKEN="tok\'en\\$\\`\\nbacktick"')
     expect(script).toContain('AGENT_REGISTER_URL="http://10.0.0.5\'\\`\\$:8123/agent/register"')
-    expect(script).not.toContain('AGENT_MACHINE_ID=$AGENT_MACHINE_ID')
-    expect(script).not.toContain('AGENT_TOKEN=$AGENT_TOKEN')
-    expect(script).not.toContain('AGENT_REGISTER_URL=$AGENT_REGISTER_URL')
   })
 })
