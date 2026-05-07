@@ -40,6 +40,9 @@ describe('RemoteAgentOnboardingService', () => {
     const script = await response.text()
     expect(script).toContain('Installing ZTools Linux agent...')
     expect(script).toContain('agent.py')
+    expect(script).toContain(
+      'export PYTHON_BIN AGENT_MACHINE_ID AGENT_TOKEN AGENT_REGISTER_URL AGENT_VERSION AGENT_PORT AGENT_ROOT REMOTE_IP AGENT_BASE_URL'
+    )
     expect(script).toContain('curl -fsS -X POST "$AGENT_REGISTER_URL"')
   })
 

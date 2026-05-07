@@ -261,6 +261,7 @@ export class RemoteAgentOnboardingService {
       '  REMOTE_IP="127.0.0.1"',
       'fi',
       'AGENT_BASE_URL="http://${REMOTE_IP}:${AGENT_PORT}"',
+      'export PYTHON_BIN AGENT_MACHINE_ID AGENT_TOKEN AGENT_REGISTER_URL AGENT_VERSION AGENT_PORT AGENT_ROOT REMOTE_IP AGENT_BASE_URL',
       'cat > "$AGENT_ROOT/config.env" <<EOF',
       `AGENT_MACHINE_ID=${envFileQuote(record.id)}`,
       `AGENT_TOKEN=${envFileQuote(record.onboardingToken)}`,
