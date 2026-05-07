@@ -81,6 +81,12 @@
       "cmds": ["WebDAV 同步"]
     },
     {
+      "code": "ui.router?router=RemoteAgents",
+      "explain": "远程 Agent",
+      "icon": "logo.png",
+      "cmds": ["远程 Agent"]
+    },
+    {
       "code": "ui.router?router=About",
       "explain": "关于 ZTools",
       "icon": "logo.png",

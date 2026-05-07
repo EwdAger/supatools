@@ -168,6 +168,17 @@ const homeRoutes: MenuRouterItemType[] = [
     }
   },
   {
+    path: '/remoteAgents',
+    name: 'RemoteAgents',
+    component: () => import('@/views/RemoteAgentSetting/RemoteAgentSetting.vue'),
+    meta: {
+      menu: {
+        label: '远程 Agent',
+        icon: 'i-z-monitor'
+      }
+    }
+  },
+  {
     path: '/about',
     name: 'About',
     component: () => import('@/views/AboutSetting/AboutSetting.vue'),
