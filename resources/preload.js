@@ -833,6 +833,24 @@ window.ztools = {
     selectPluginFile: async () => await electron.ipcRenderer.invoke('internal:select-plugin-file'),
     importPlugin: async () => await electron.ipcRenderer.invoke('internal:import-plugin'),
     getDevProjects: async () => await electron.ipcRenderer.invoke('internal:get-dev-projects'),
+    listRemoteAgents: async () =>
+      await electron.ipcRenderer.invoke('internal:remote-agents-list'),
+    listRemoteAgentLocalAddresses: async () =>
+      await electron.ipcRenderer.invoke('internal:remote-agent-local-addresses'),
+    createRemoteAgent: async (payload) =>
+      await electron.ipcRenderer.invoke('internal:remote-agent-create', payload),
+    regenerateRemoteAgentInstallCommand: async (machineId, selectedLocalAddress) =>
+      await electron.ipcRenderer.invoke(
+        'internal:remote-agent-regenerate-install-command',
+        machineId,
+        selectedLocalAddress
+      ),
+    saveRemoteAgentPluginConfig: async (payload) =>
+      await electron.ipcRenderer.invoke('internal:remote-agent-save-plugin-config', payload),
+    syncRemoteAgent: async (machineId) =>
+      await electron.ipcRenderer.invoke('internal:remote-agent-sync', machineId),
+    listRemoteAgentSyncJobs: async (machineId) =>
+      await electron.ipcRenderer.invoke('internal:remote-agent-sync-jobs', machineId),
     updateDevProjectsOrder: async (pluginNames) =>
       await electron.ipcRenderer.invoke('internal:update-dev-projects-order', pluginNames),
     readPluginInfoFromZpx: async (zpxPath) =>

@@ -78,4 +78,38 @@ describe('plugin preload internal api bridge', () => {
       '/workspace/demo/plugin.json'
     )
   })
+
+  it('exposes createRemoteAgent for internal plugin runtimes', async () => {
+    require(preloadPath)
+
+    const internalApi = (globalThis as any).window.ztools?.internal
+
+    expect(internalApi?.createRemoteAgent).toBeTypeOf('function')
+
+    await internalApi.createRemoteAgent({
+      name: 'Workshop Linux',
+      platform: 'linux',
+      selectedLocalAddress: '192.168.1.23',
+      tagPolicy: { mode: 'allow_all' }
+    })
+
+    expect(ipcInvoke).toHaveBeenCalledWith('internal:remote-agent-create', {
+      name: 'Workshop Linux',
+      platform: 'linux',
+      selectedLocalAddress: '192.168.1.23',
+      tagPolicy: { mode: 'allow_all' }
+    })
+  })
+
+  it('exposes listRemoteAgents for internal plugin runtimes', async () => {
+    require(preloadPath)
+
+    const internalApi = (globalThis as any).window.ztools?.internal
+
+    expect(internalApi?.listRemoteAgents).toBeTypeOf('function')
+
+    await internalApi.listRemoteAgents()
+
+    expect(ipcInvoke).toHaveBeenCalledWith('internal:remote-agents-list')
+  })
 })

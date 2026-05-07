@@ -7,6 +7,7 @@ import detachedWindowManager from '../../core/detachedWindowManager.js'
 import floatingBallManager from '../../core/floatingBallManager.js'
 import httpServer from '../../core/httpServer.js'
 import mcpServer from '../../core/mcpServer.js'
+import remoteAgentManager from '../../core/remoteAgent/manager.js'
 import superPanelManager from '../../core/superPanelManager.js'
 import translationManager from '../../core/translationManager.js'
 import aiModelsAPI from '../renderer/aiModels.js'
@@ -299,6 +300,61 @@ export class InternalPluginAPI {
         throw new PermissionDeniedError('internal:get-dev-projects')
       }
       return await pluginsAPI.devProjects.getDevProjects()
+    })
+
+    ipcMain.handle('internal:remote-agents-list', async (event) => {
+      if (!requireInternalPlugin(this.pluginManager, event)) {
+        throw new PermissionDeniedError('internal:remote-agents-list')
+      }
+      return await remoteAgentManager.listRemoteAgents()
+    })
+
+    ipcMain.handle('internal:remote-agent-local-addresses', async (event) => {
+      if (!requireInternalPlugin(this.pluginManager, event)) {
+        throw new PermissionDeniedError('internal:remote-agent-local-addresses')
+      }
+      return await remoteAgentManager.listRemoteAgentLocalAddresses()
+    })
+
+    ipcMain.handle('internal:remote-agent-create', async (event, payload) => {
+      if (!requireInternalPlugin(this.pluginManager, event)) {
+        throw new PermissionDeniedError('internal:remote-agent-create')
+      }
+      return await remoteAgentManager.createRemoteAgent(payload)
+    })
+
+    ipcMain.handle(
+      'internal:remote-agent-regenerate-install-command',
+      async (event, machineId: string, selectedLocalAddress: string) => {
+        if (!requireInternalPlugin(this.pluginManager, event)) {
+          throw new PermissionDeniedError('internal:remote-agent-regenerate-install-command')
+        }
+        return await remoteAgentManager.regenerateRemoteAgentInstallCommand(
+          machineId,
+          selectedLocalAddress
+        )
+      }
+    )
+
+    ipcMain.handle('internal:remote-agent-save-plugin-config', async (event, payload) => {
+      if (!requireInternalPlugin(this.pluginManager, event)) {
+        throw new PermissionDeniedError('internal:remote-agent-save-plugin-config')
+      }
+      return await remoteAgentManager.saveRemoteAgentPluginConfig(payload)
+    })
+
+    ipcMain.handle('internal:remote-agent-sync', async (event, machineId: string) => {
+      if (!requireInternalPlugin(this.pluginManager, event)) {
+        throw new PermissionDeniedError('internal:remote-agent-sync')
+      }
+      return await remoteAgentManager.syncRemoteAgent(machineId)
+    })
+
+    ipcMain.handle('internal:remote-agent-sync-jobs', async (event, machineId: string) => {
+      if (!requireInternalPlugin(this.pluginManager, event)) {
+        throw new PermissionDeniedError('internal:remote-agent-sync-jobs')
+      }
+      return await remoteAgentManager.listRemoteAgentSyncJobs(machineId)
     })
 
     ipcMain.handle('internal:update-dev-projects-order', async (event, pluginNames: string[]) => {

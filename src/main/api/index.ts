@@ -45,6 +45,7 @@ import pluginFFmpegAPI from './plugin/ffmpeg'
 
 import httpServer from '../core/httpServer'
 import mcpServer from '../core/mcpServer'
+import remoteAgentManager from '../core/remoteAgent/manager'
 import { runStartupDataMigrations } from '../core/startupDataMigrations'
 import superPanelManager from '../core/superPanelManager'
 import translationManager from '../core/translationManager'
@@ -92,6 +93,7 @@ class APIManager {
     aiModelsAPI.init()
     appsAPI.init(mainWindow, pluginManager)
     appsAPI.setShowWindowCallback(() => windowManager.showWindow())
+    remoteAgentManager.init()
     pluginsAPI.init(mainWindow, pluginManager)
     windowAPI.init(mainWindow)
     settingsAPI.init(mainWindow, pluginManager)

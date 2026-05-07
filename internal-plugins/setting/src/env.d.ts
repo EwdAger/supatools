@@ -80,6 +80,39 @@ declare global {
         }>
         // 获取当前记录的开发项目集合
         getDevProjects: () => Promise<any[]>
+        listRemoteAgents: () => Promise<any[]>
+        listRemoteAgentLocalAddresses: () => Promise<string[]>
+        createRemoteAgent: (payload: {
+          name: string
+          platform: 'linux'
+          selectedLocalAddress: string
+          tagPolicy: { mode: 'allow_all' } | { mode: 'allow_list'; tags: string[] }
+        }) => Promise<{
+          success: boolean
+          record?: any
+          installCommand?: string
+          error?: string
+        }>
+        regenerateRemoteAgentInstallCommand: (
+          machineId: string,
+          selectedLocalAddress: string
+        ) => Promise<{
+          success: boolean
+          record?: any
+          installCommand?: string
+          error?: string
+        }>
+        saveRemoteAgentPluginConfig: (payload: {
+          machineId: string
+          pluginName: string
+          config: Record<string, unknown>
+        }) => Promise<{ success: boolean; error?: string }>
+        syncRemoteAgent: (machineId: string) => Promise<{
+          success: boolean
+          summary?: any
+          error?: string
+        }>
+        listRemoteAgentSyncJobs: (machineId: string) => Promise<any[]>
         // 导入开发中的插件工程，可选直接传入 plugin.json 路径
         importDevPlugin: (pluginJsonPath?: string) => Promise<{
           success: boolean
