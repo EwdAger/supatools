@@ -628,8 +628,7 @@ export class PluginsAPI {
     pluginName: string
   ): Promise<{ success: boolean; content?: string; error?: string }> {
     try {
-      const baseUrl = `https://raw.githubusercontent.com/ZToolsCenter/ZTools-plugins/main/plugins/${pluginName}`
-      const readmeUrl = `${baseUrl}/README.md`
+      const readmeUrl = this.resolveRemotePluginReadmeUrl(pluginName)
 
       console.log('[Plugins] 从远程加载 README:', readmeUrl)
 
@@ -644,6 +643,45 @@ export class PluginsAPI {
       let content =
         typeof response.data === 'string' ? response.data : JSON.stringify(response.data)
 
+      const baseUrl = this.getRemoteReadmeBaseUrl(readmeUrl)
+
+      content = this.rewriteRemoteReadmeContent(content, baseUrl)
+
+      return { success: true, content }
+    } catch (error: unknown) {
+      console.error('[Plugins] 从远程加载插件 README 失败:', error)
+      return { success: false, error: error instanceof Error ? error.message : '加载失败' }
+    }
+  }
+
+  private resolveRemotePluginReadmeUrl(pluginName: string): string {
+    const marketPlugins = databaseAPI.dbGet('plugin-market-data')
+    if (Array.isArray(marketPlugins)) {
+      const matchedPlugin = marketPlugins.find(
+        (plugin: any) =>
+          plugin &&
+          typeof plugin.name === 'string' &&
+          plugin.name === pluginName &&
+          typeof plugin.descriptionURL === 'string' &&
+          plugin.descriptionURL.trim()
+      )
+      if (matchedPlugin?.descriptionURL) {
+        return matchedPlugin.descriptionURL.trim()
+      }
+    }
+
+    return `https://raw.githubusercontent.com/ZToolsCenter/ZTools-plugins/main/plugins/${pluginName}/README.md`
+  }
+
+  private getRemoteReadmeBaseUrl(readmeUrl: string): string {
+    try {
+      return new URL('.', readmeUrl).toString().replace(/\/$/, '')
+    } catch {
+      return readmeUrl.replace(/\/[^/]*$/, '')
+    }
+  }
+
+  private rewriteRemoteReadmeContent(content: string, baseUrl: string): string {
       // 替换 Markdown 图片语法：![alt](path)
       content = content.replace(/!\[([^\]]*)\]\((?!http)([^)]+)\)/g, (_match, alt, imgPath) => {
         const cleanPath = imgPath.replace(/^\.\//, '')
@@ -674,11 +712,7 @@ export class PluginsAPI {
         }
       )
 
-      return { success: true, content }
-    } catch (error: unknown) {
-      console.error('[Plugins] 从远程加载插件 README 失败:', error)
-      return { success: false, error: error instanceof Error ? error.message : '加载失败' }
-    }
+    return content
   }
 
   // 获取插件存储的数据库数据

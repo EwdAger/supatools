@@ -11,6 +11,7 @@ export type PluginMarketPlugin = {
   version: string
   title?: string
   description?: string
+  descriptionURL?: string
   logo?: string
   /** 支持的平台列表，如 ['darwin', 'win32']；空表示全平台 */
   platform?: string[]
