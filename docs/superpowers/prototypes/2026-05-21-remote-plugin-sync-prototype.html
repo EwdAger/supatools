@@ -1,0 +1,2062 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Remote Plugin Sync Prototype</title>
+    <style>
+      :root {
+        --bg-color: #f4f4f4;
+        --text-color: #333333;
+        --text-secondary: #616161;
+        --divider-color: rgba(0, 0, 0, 0.1);
+        --border-color: #e5e7eb;
+        --card-bg: #ffffff;
+        --control-bg: rgba(0, 0, 0, 0.035);
+        --hover-bg: #f9fafb;
+        --active-bg: #f0f9ff;
+        --primary-color: #0284c7;
+        --primary-light-bg: rgba(2, 132, 199, 0.12);
+        --warning-color: #f59e0b;
+        --warning-light-bg: rgba(245, 158, 11, 0.14);
+        --danger-color: #ef4444;
+        --danger-light-bg: rgba(239, 68, 68, 0.14);
+        --success-color: #10b981;
+        --success-light-bg: rgba(16, 185, 129, 0.14);
+        --purple-color: #8b5cf6;
+        --purple-light-bg: rgba(139, 92, 246, 0.14);
+        --shadow-color: rgba(0, 0, 0, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        background: var(--bg-color);
+        color: var(--text-color);
+      }
+
+      .app-shell {
+        display: grid;
+        grid-template-columns: 200px 1fr;
+        min-height: 100vh;
+      }
+
+      .settings-sidebar {
+        border-right: 1px solid var(--divider-color);
+        padding: 12px 8px;
+        overflow-y: auto;
+        background: #fafafa;
+      }
+
+      .menu-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        margin-bottom: 6px;
+        border-radius: 8px;
+        color: var(--text-color);
+        cursor: pointer;
+        transition: 0.2s ease;
+      }
+
+      .menu-item:hover {
+        background: var(--hover-bg);
+      }
+
+      .menu-item.active {
+        background: var(--active-bg);
+        color: var(--primary-color);
+        font-weight: 500;
+      }
+
+      .menu-icon {
+        width: 18px;
+        text-align: center;
+        opacity: 0.9;
+      }
+
+      .content-shell {
+        position: relative;
+        height: 100vh;
+        overflow: hidden;
+        background: var(--bg-color);
+      }
+
+      .view {
+        display: none;
+        height: 100%;
+      }
+
+      .view.active {
+        display: block;
+      }
+
+      .content-panel {
+        position: relative;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .scrollable-content {
+        position: absolute;
+        inset: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 20px;
+        background: var(--bg-color);
+      }
+
+      .section-title {
+        margin: 0 0 8px 0;
+        font-size: 20px;
+        font-weight: 600;
+      }
+
+      .section-desc {
+        margin: 0 0 24px 0;
+        font-size: 13px;
+        color: var(--text-secondary);
+      }
+
+      .panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 20px;
+        gap: 16px;
+      }
+
+      .tab-group {
+        display: flex;
+        gap: 6px;
+        padding: 3px;
+        border-radius: 8px;
+        background: var(--control-bg);
+      }
+
+      .tab-btn {
+        padding: 8px 14px;
+        border-radius: 6px;
+        font-size: 13px;
+        color: var(--text-secondary);
+        background: transparent;
+      }
+
+      .tab-btn.active {
+        background: #fff;
+        color: var(--primary-color);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+      }
+
+      .action-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        border: 1px solid var(--divider-color);
+        background: #fff;
+        color: var(--text-color);
+        font-size: 13px;
+        font-weight: 500;
+      }
+
+      .btn-primary {
+        color: #fff;
+        border-color: var(--primary-color);
+        background: var(--primary-color);
+      }
+
+      .btn-secondary {
+        color: var(--primary-color);
+        border-color: rgba(2, 132, 199, 0.28);
+        background: rgba(2, 132, 199, 0.06);
+      }
+
+      .btn-ghost {
+        background: transparent;
+      }
+
+      .sub-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+        padding: 14px 16px;
+        border: 1px solid var(--divider-color);
+        border-radius: 10px;
+        background: #fff;
+      }
+
+      .sub-banner strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 14px;
+      }
+
+      .sub-banner span {
+        color: var(--text-secondary);
+        font-size: 12px;
+      }
+
+      .plugin-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .card {
+        border: 1px solid var(--divider-color);
+        border-radius: 10px;
+        background: var(--card-bg);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+      }
+
+      .plugin-item {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 16px;
+      }
+
+      .plugin-icon-wrapper {
+        position: relative;
+        width: 52px;
+        height: 52px;
+        flex-shrink: 0;
+      }
+
+      .plugin-icon,
+      .plugin-icon-placeholder {
+        width: 52px;
+        height: 52px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #d6ecff, #f0f9ff);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+      }
+
+      .plugin-dev-badge {
+        position: absolute;
+        right: -2px;
+        bottom: -2px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: var(--purple-color);
+        color: #fff;
+        font-size: 10px;
+        font-weight: 700;
+      }
+
+      .plugin-info {
+        min-width: 0;
+        flex: 1;
+      }
+
+      .plugin-name {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        font-size: 15px;
+        font-weight: 600;
+      }
+
+      .plugin-version {
+        color: var(--text-secondary);
+        font-weight: 400;
+        font-size: 13px;
+      }
+
+      .plugin-desc {
+        margin-top: 6px;
+        font-size: 13px;
+        color: var(--text-secondary);
+        line-height: 1.5;
+      }
+
+      .plugin-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+
+      .icon-btn {
+        width: 32px;
+        height: 32px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text-secondary);
+        border: none;
+        font-size: 14px;
+      }
+
+      .icon-btn:hover {
+        background: var(--hover-bg);
+      }
+
+      .open-btn {
+        color: var(--primary-color);
+      }
+
+      .folder-btn {
+        color: var(--primary-color);
+      }
+
+      .kill-btn {
+        color: var(--warning-color);
+      }
+
+      .delete-btn {
+        color: var(--danger-color);
+      }
+
+      .sync-btn {
+        color: var(--success-color);
+      }
+
+      .disabled-badge,
+      .running-badge,
+      .detail-badge,
+      .state-chip,
+      .mini-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 500;
+      }
+
+      .disabled-badge {
+        color: var(--warning-color);
+        background: var(--warning-light-bg);
+      }
+
+      .running-badge {
+        color: var(--success-color);
+        background: var(--success-light-bg);
+      }
+
+      .detail-badge {
+        color: var(--primary-color);
+        background: var(--primary-light-bg);
+      }
+
+      .state-chip.ok {
+        color: #047857;
+        background: rgba(16, 185, 129, 0.16);
+      }
+
+      .state-chip.warn {
+        color: #b45309;
+        background: rgba(245, 158, 11, 0.16);
+      }
+
+      .state-chip.danger {
+        color: #b91c1c;
+        background: rgba(239, 68, 68, 0.16);
+      }
+
+      .state-chip.neutral {
+        color: var(--text-secondary);
+        background: rgba(0, 0, 0, 0.06);
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--success-color);
+        box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+      }
+
+      .detail-panel {
+        position: absolute;
+        inset: 0;
+        z-index: 10;
+        display: none;
+        flex-direction: column;
+        background: var(--bg-color);
+      }
+
+      .detail-panel.active {
+        display: flex;
+      }
+
+      .detail-panel.sub-detail-panel {
+        z-index: 14;
+      }
+
+      .detail-topbar {
+        height: 44px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 10px;
+        border-bottom: 1px solid var(--divider-color);
+        background: var(--bg-color);
+      }
+
+      .topbar-title {
+        font-size: 14px;
+        color: var(--text-secondary);
+      }
+
+      .topbar-spacer {
+        flex: 1;
+      }
+
+      .detail-scrollable {
+        flex: 1;
+        overflow-y: auto;
+        padding: 18px 20px 24px;
+      }
+
+      .detail-hero {
+        display: grid;
+        grid-template-columns: 92px 1fr;
+        gap: 18px;
+        margin-bottom: 20px;
+      }
+
+      .detail-logo {
+        width: 92px;
+        height: 92px;
+        border-radius: 20px;
+        background: linear-gradient(135deg, #d6ecff, #f0f9ff);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 40px;
+      }
+
+      .detail-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .detail-title h2 {
+        margin: 0;
+        font-size: 24px;
+        line-height: 1.2;
+      }
+
+      .detail-subtitle {
+        margin: 8px 0 14px;
+        color: var(--text-secondary);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+
+      .meta-card {
+        padding: 14px;
+        border: 1px solid var(--divider-color);
+        border-radius: 10px;
+        background: #fff;
+      }
+
+      .meta-card .label {
+        color: var(--text-secondary);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .meta-card .value {
+        margin-top: 8px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .detail-grid {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 16px;
+      }
+
+      .detail-card {
+        padding: 16px;
+      }
+
+      .detail-card h3 {
+        margin: 0 0 8px;
+        font-size: 15px;
+      }
+
+      .detail-card p {
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .server-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .server-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 14px;
+        border: 1px solid var(--divider-color);
+        border-radius: 10px;
+        background: #fff;
+      }
+
+      .server-row strong {
+        display: block;
+        font-size: 14px;
+      }
+
+      .server-row span {
+        display: block;
+        margin-top: 4px;
+        font-size: 12px;
+        color: var(--text-secondary);
+      }
+
+      .page-grid {
+        display: grid;
+        grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+        gap: 24px;
+      }
+
+      .service-config {
+        padding-top: 8px;
+      }
+
+      .setting-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+
+      .setting-item.vertical {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+      }
+
+      .setting-label {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .setting-desc {
+        color: var(--text-secondary);
+        font-size: 12px;
+        font-weight: 400;
+      }
+
+      .input,
+      .command-box {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid var(--divider-color);
+        border-radius: 10px;
+        background: var(--card-bg);
+        color: var(--text-color);
+      }
+
+      .command-box {
+        font-family: "SF Mono", "Menlo", "Monaco", monospace;
+        resize: vertical;
+      }
+
+      .machine-panel,
+      .api-docs {
+        margin-top: 20px;
+      }
+
+      .panel-title,
+      .docs-title {
+        margin: 0 0 12px;
+        font-size: 16px;
+        font-weight: 600;
+      }
+
+      .machine-list,
+      .job-list,
+      .deploy-list,
+      .server-plugin-status-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .machine-item,
+      .job-item,
+      .deploy-item,
+      .server-plugin-status {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid var(--divider-color);
+        border-radius: 10px;
+        background: #fff;
+      }
+
+      .machine-item.active {
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 1px rgba(2, 132, 199, 0.22);
+      }
+
+      .machine-top,
+      .plugin-main,
+      .panel-heading,
+      .job-item,
+      .server-plugin-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .machine-meta,
+      .plugin-tags,
+      .job-message,
+      .server-plugin-desc {
+        margin-top: 6px;
+        color: var(--text-secondary);
+        font-size: 12px;
+      }
+
+      .status-pill {
+        font-size: 12px;
+        border-radius: 999px;
+        padding: 2px 8px;
+      }
+
+      .status-online {
+        color: #047857;
+        background: rgba(16, 185, 129, 0.16);
+      }
+
+      .status-pending {
+        color: #b45309;
+        background: rgba(245, 158, 11, 0.16);
+      }
+
+      .status-offline,
+      .status-error {
+        color: #b91c1c;
+        background: rgba(239, 68, 68, 0.16);
+      }
+
+      .status-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 20px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        background: var(--hover-bg);
+      }
+
+      .status-text {
+        color: var(--text-secondary);
+        font-size: 13px;
+      }
+
+      .remote-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 340px;
+        gap: 20px;
+      }
+
+      .remote-main-stack,
+      .remote-side-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .server-plugin-status .kv-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .kv-box {
+        padding: 10px;
+        border-radius: 8px;
+        background: var(--hover-bg);
+      }
+
+      .kv-box .k {
+        color: var(--text-secondary);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .kv-box .v {
+        margin-top: 6px;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .code-box {
+        margin-top: 12px;
+        padding: 12px;
+        border-radius: 10px;
+        background: #1f2937;
+        color: #d1fae5;
+        font-family: "SF Mono", "Menlo", "Monaco", monospace;
+        font-size: 12px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+      }
+
+      .timeline {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .timeline-item {
+        padding-left: 12px;
+        border-left: 2px solid rgba(2, 132, 199, 0.2);
+      }
+
+      .timeline-item strong {
+        display: block;
+        font-size: 13px;
+      }
+
+      .timeline-item span {
+        display: block;
+        margin-top: 4px;
+        font-size: 12px;
+        color: var(--text-secondary);
+        line-height: 1.55;
+      }
+
+      .table {
+        border: 1px solid var(--divider-color);
+        border-radius: 10px;
+        overflow: hidden;
+        background: #fff;
+      }
+
+      .table-header,
+      .table-row {
+        display: grid;
+        grid-template-columns: 2fr 0.8fr 0.9fr 0.9fr 1fr 100px;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .table-header {
+        padding: 12px 14px;
+        background: var(--hover-bg);
+        color: var(--text-secondary);
+        font-size: 12px;
+      }
+
+      .table-row {
+        padding: 14px;
+        border-top: 1px solid var(--divider-color);
+      }
+
+      .table-row strong {
+        display: block;
+        font-size: 14px;
+      }
+
+      .table-row small {
+        display: block;
+        margin-top: 4px;
+        color: var(--text-secondary);
+        font-size: 12px;
+      }
+
+      .prototype-note {
+        margin-top: 12px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        color: var(--text-secondary);
+        background: rgba(2, 132, 199, 0.08);
+        font-size: 12px;
+        line-height: 1.55;
+      }
+
+      .market-grid,
+      .warehouse-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 18px;
+      }
+
+      .market-list,
+      .warehouse-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .market-card,
+      .warehouse-card {
+        padding: 14px 16px;
+      }
+
+      .market-card-head,
+      .warehouse-card-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .market-card-title,
+      .warehouse-card-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .market-card-title strong,
+      .warehouse-card-title strong {
+        font-size: 15px;
+      }
+
+      .market-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .warehouse-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+
+      .warehouse-state-toggle {
+        display: flex;
+        gap: 8px;
+      }
+
+      .warehouse-overview {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+
+      .overview-card {
+        padding: 14px;
+        border-radius: 10px;
+        border: 1px solid var(--divider-color);
+        background: #fff;
+      }
+
+      .overview-card .label {
+        color: var(--text-secondary);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .overview-card .value {
+        margin-top: 8px;
+        font-size: 22px;
+        font-weight: 700;
+      }
+
+      .warehouse-filter-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+
+      .filter-pill {
+        padding: 7px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--divider-color);
+        background: #fff;
+        color: var(--text-secondary);
+        font-size: 12px;
+      }
+
+      .filter-pill.active {
+        color: var(--primary-color);
+        background: var(--primary-light-bg);
+        border-color: rgba(2, 132, 199, 0.22);
+      }
+
+      .server-selector-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .server-selector-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 14px;
+        border: 1px solid var(--divider-color);
+        border-radius: 10px;
+        background: #fff;
+      }
+
+      .server-selector-item strong {
+        display: block;
+        font-size: 14px;
+      }
+
+      .server-selector-item span {
+        display: block;
+        margin-top: 4px;
+        color: var(--text-secondary);
+        font-size: 12px;
+      }
+
+      @media (max-width: 1200px) {
+        .app-shell {
+          grid-template-columns: 1fr;
+        }
+
+        .settings-sidebar {
+          display: flex;
+          flex-wrap: wrap;
+          border-right: none;
+          border-bottom: 1px solid var(--divider-color);
+        }
+
+        .content-shell {
+          height: auto;
+          min-height: calc(100vh - 80px);
+        }
+
+        .page-grid,
+        .detail-grid,
+        .remote-layout,
+        .market-grid,
+        .warehouse-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .meta-grid,
+        .server-plugin-status .kv-grid,
+        .warehouse-overview {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="settings-sidebar">
+        <div class="menu-item">
+          <div class="menu-icon">⚙</div>
+          <span>通用设置</span>
+        </div>
+        <div class="menu-item active" data-menu-target="plugins-view">
+          <div class="menu-icon">🧩</div>
+          <span>已安装插件</span>
+        </div>
+        <div class="menu-item" data-menu-target="market-view">
+          <div class="menu-icon">🏪</div>
+          <span>插件市场</span>
+        </div>
+        <div class="menu-item" data-menu-target="remote-view">
+          <div class="menu-icon">🖥</div>
+          <span>远程 Agent</span>
+        </div>
+        <div class="menu-item" data-menu-target="warehouse-view">
+          <div class="menu-icon">📦</div>
+          <span>远程插件仓</span>
+        </div>
+      </aside>
+
+      <main class="content-shell">
+        <section class="view active" id="plugins-view">
+          <div class="content-panel">
+            <div class="scrollable-content">
+              <div class="panel-header">
+                <div>
+                  <h2 class="section-title">已安装插件</h2>
+                  <p class="section-desc">基于现有插件中心结构，原型只在详情面板里增加远程同步入口。</p>
+                </div>
+                <div class="action-row">
+                  <div class="tab-group">
+                    <div class="tab-btn active">全部插件</div>
+                    <div class="tab-btn">运行中</div>
+                  </div>
+                  <button class="btn">导入本地插件</button>
+                </div>
+              </div>
+
+              <div class="sub-banner">
+                <div>
+                  <strong>这版不是新页面</strong>
+                  <span>入口仍然从现有 `已安装插件` 列表点进详情，只在 `PluginDetailToolbar` 上增加远程同步动作。</span>
+                </div>
+                <div class="action-row">
+                  <button class="btn btn-ghost">查看路由位置</button>
+                  <button class="btn btn-primary" id="open-detail-btn">打开插件详情原型</button>
+                </div>
+              </div>
+
+              <div class="plugin-list">
+                <div class="card plugin-item">
+                  <div class="plugin-icon-wrapper">
+                    <div class="plugin-icon">🔎</div>
+                  </div>
+                  <div class="plugin-info">
+                    <div class="plugin-name">
+                      Remote OCR Worker
+                      <span class="plugin-version">v1.6.2</span>
+                      <span class="running-badge"><span class="status-dot"></span>运行中</span>
+                    </div>
+                    <div class="plugin-desc">service 型远程可同步插件。详情页中会出现新增的“同步到远程”动作。</div>
+                  </div>
+                  <div class="plugin-meta">
+                    <button class="icon-btn open-btn">▶</button>
+                    <button class="icon-btn kill-btn">■</button>
+                    <button class="icon-btn folder-btn">📁</button>
+                    <button class="icon-btn sync-btn">☁</button>
+                  </div>
+                </div>
+
+                <div class="card plugin-item">
+                  <div class="plugin-icon-wrapper">
+                    <div class="plugin-icon">📄</div>
+                  </div>
+                  <div class="plugin-info">
+                    <div class="plugin-name">
+                      Markdown Snippet Pack
+                      <span class="plugin-version">v0.9.4</span>
+                    </div>
+                    <div class="plugin-desc">static 型远程可同步插件。远端有安装状态，但不会展示运行态。</div>
+                  </div>
+                  <div class="plugin-meta">
+                    <button class="icon-btn folder-btn">📁</button>
+                    <button class="icon-btn sync-btn">☁</button>
+                  </div>
+                </div>
+
+                <div class="card plugin-item">
+                  <div class="plugin-icon-wrapper">
+                    <div class="plugin-icon">⌨</div>
+                  </div>
+                  <div class="plugin-info">
+                    <div class="plugin-name">
+                      Desktop Clipboard Bridge
+                      <span class="plugin-version">v2.1.0</span>
+                      <span class="disabled-badge">不支持远程同步</span>
+                    </div>
+                    <div class="plugin-desc">未声明 remoteSync，仍保留现有本地插件能力，不在远程同步链路中出现。</div>
+                  </div>
+                  <div class="plugin-meta">
+                    <button class="icon-btn folder-btn">📁</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="prototype-note">
+                对应代码锚点：`PluginsSetting.vue` 的插件列表卡片、`PluginDetail.vue` / `DetailPanel.vue`
+                的覆盖式详情结构、`PluginDetailToolbar.vue` 的顶部动作区。
+              </div>
+            </div>
+
+            <div class="detail-panel" id="plugin-detail-panel">
+              <div class="detail-topbar">
+                <button class="icon-btn" id="close-detail-btn">←</button>
+                <div class="topbar-title">插件详情</div>
+                <div class="topbar-spacer"></div>
+                <button class="icon-btn open-btn" title="打开">▶</button>
+                <button class="icon-btn folder-btn" title="打开目录">📁</button>
+                <button class="icon-btn sync-btn" title="同步到远程">☁</button>
+                <button class="icon-btn delete-btn" title="卸载">🗑</button>
+              </div>
+
+              <div class="detail-scrollable">
+                <div class="detail-hero">
+                  <div class="detail-logo">🔎</div>
+                  <div>
+                    <div class="detail-title">
+                      <h2>Remote OCR Worker</h2>
+                      <span class="detail-badge">远程可同步</span>
+                      <span class="detail-badge">service</span>
+                    </div>
+                    <div class="detail-subtitle">
+                      这里沿用现有详情页心智，不新增独立插件同步页面。新增动作是顶部的“同步到远程”，并在详情内容里补一块远程状态摘要。
+                    </div>
+                  </div>
+                </div>
+
+                <div class="meta-grid">
+                  <div class="meta-card">
+                    <div class="label">本地版本</div>
+                    <div class="value">v1.6.2</div>
+                  </div>
+                  <div class="meta-card">
+                    <div class="label">运行模型</div>
+                    <div class="value">service</div>
+                  </div>
+                  <div class="meta-card">
+                    <div class="label">平台</div>
+                    <div class="value">linux</div>
+                  </div>
+                  <div class="meta-card">
+                    <div class="label">远程声明</div>
+                    <div class="value">enabled</div>
+                  </div>
+                </div>
+
+                <div class="detail-grid">
+                  <div class="card detail-card">
+                    <h3>同步到远程</h3>
+                    <p>插件详情主面板只保留摘要，不直接摊开服务器选择列表，避免在小窗里形成第三层拥挤内容。</p>
+                    <div class="server-list">
+                      <div class="server-row">
+                        <div>
+                          <strong>已配置远程服务器</strong>
+                          <span>3 台</span>
+                        </div>
+                        <span class="state-chip neutral">摘要</span>
+                      </div>
+                      <div class="server-row">
+                        <div>
+                          <strong>已安装该插件</strong>
+                          <span>1 台 · Vision Box 01</span>
+                        </div>
+                        <span class="state-chip warn">1 台需升级</span>
+                      </div>
+                      <div class="server-row">
+                        <div>
+                          <strong>配置联动</strong>
+                          <span>同步时若该机器已保存配置，将自动顺带下发</span>
+                        </div>
+                        <span class="state-chip ok">已启用</span>
+                      </div>
+                    </div>
+                    <div class="action-row" style="margin-top: 14px;">
+                      <button class="btn btn-primary" id="open-plugin-sync-subpanel-btn">选择远程服务器</button>
+                    </div>
+                  </div>
+
+                  <div class="card detail-card">
+                    <h3>远程状态摘要</h3>
+                    <p>这里只给轻量摘要。完整的安装状态、配置和日志仍然回到“远程 Agent”页查看。</p>
+                    <div class="server-list">
+                      <div class="server-row">
+                        <div>
+                          <strong>已配置服务器</strong>
+                          <span>3 台</span>
+                        </div>
+                      </div>
+                      <div class="server-row">
+                        <div>
+                          <strong>已安装</strong>
+                          <span>1 台</span>
+                        </div>
+                      </div>
+                      <div class="server-row">
+                        <div>
+                          <strong>版本落后</strong>
+                          <span>1 台</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="detail-panel sub-detail-panel" id="plugin-sync-subpanel">
+                <div class="detail-topbar">
+                  <button class="icon-btn" id="close-plugin-sync-subpanel-btn">←</button>
+                  <div class="topbar-title">同步到远程</div>
+                  <div class="topbar-spacer"></div>
+                </div>
+
+                <div class="detail-scrollable">
+                  <div class="card detail-card" style="margin-bottom: 16px;">
+                    <h3>Remote OCR Worker</h3>
+                    <p>这里才展开已配置远程服务器列表。它是插件详情里的二级页，不和详情主面板并排挤在一起。</p>
+                    <div class="meta-grid" style="margin-top: 16px; margin-bottom: 0;">
+                      <div class="meta-card">
+                        <div class="label">目标服务器</div>
+                        <div class="value">3 台</div>
+                      </div>
+                      <div class="meta-card">
+                        <div class="label">已安装</div>
+                        <div class="value">1 台</div>
+                      </div>
+                      <div class="meta-card">
+                        <div class="label">需升级</div>
+                        <div class="value">1 台</div>
+                      </div>
+                      <div class="meta-card">
+                        <div class="label">离线</div>
+                        <div class="value">1 台</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="card detail-card">
+                    <div class="panel-heading">
+                      <h3>已配置远程服务器</h3>
+                      <button class="btn">去远程 Agent 页</button>
+                    </div>
+                    <p>这里只做显式动作选择，不在这里编辑机器-插件配置。</p>
+
+                    <div class="server-list" style="margin-top: 14px;">
+                      <div class="server-row">
+                        <div>
+                          <strong>Vision Box 01</strong>
+                          <span>online · 已安装 v1.5.0 · 需要升级 · 已保存该插件配置</span>
+                        </div>
+                        <button class="btn btn-primary">同步</button>
+                      </div>
+                      <div class="server-row">
+                        <div>
+                          <strong>Lab Runner 02</strong>
+                          <span>online · 未安装 · 同步时将连同已保存配置一起下发</span>
+                        </div>
+                        <button class="btn btn-primary">同步</button>
+                      </div>
+                      <div class="server-row">
+                        <div>
+                          <strong>Archive Node</strong>
+                          <span>offline · 暂不可同步 · 可跳转查看机器详情</span>
+                        </div>
+                        <button class="btn">查看机器</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="prototype-note">
+                    对应交互建议：`PluginDetailToolbar.vue` 的同步按钮进入这个二级页；二级页只负责选服务器和发起同步，不承载配置编辑与完整状态管理。
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="market-view">
+          <div class="content-panel">
+            <div class="scrollable-content">
+              <div class="panel-header">
+                <div>
+                  <h2 class="section-title">插件市场</h2>
+                  <p class="section-desc">对同时支持本地安装和远程分发的插件，市场页同时展示两个清晰入口。</p>
+                </div>
+                <div class="action-row">
+                  <button class="btn">刷新市场</button>
+                  <button class="btn btn-secondary" data-menu-target="warehouse-view">查看远程插件仓</button>
+                </div>
+              </div>
+
+              <div class="market-grid">
+                <div>
+                  <div class="market-list">
+                    <div class="card market-card">
+                      <div class="market-card-head">
+                        <div>
+                          <div class="market-card-title">
+                            <strong>Remote OCR Worker</strong>
+                            <span class="detail-badge">本地 + 远程</span>
+                          </div>
+                          <div class="plugin-desc">同一个插件包同时带本地面和远端面。已在远程仓，且市场有更高版本。</div>
+                        </div>
+                        <span class="state-chip warn">远程仓可更新</span>
+                      </div>
+                      <div class="badge-row" style="margin-top: 10px;">
+                        <span class="detail-badge">local entry</span>
+                        <span class="detail-badge">remote entry</span>
+                        <span class="mini-pill">service</span>
+                      </div>
+                      <div class="market-actions">
+                        <button class="btn btn-primary">安装到本地</button>
+                        <button class="btn btn-secondary">更新远程仓</button>
+                      </div>
+                    </div>
+
+                    <div class="card market-card">
+                      <div class="market-card-head">
+                        <div>
+                          <div class="market-card-title">
+                            <strong>Webhook Trigger</strong>
+                            <span class="detail-badge">仅远程分发</span>
+                          </div>
+                          <div class="plugin-desc">支持加入远程插件仓，但本地不作为可打开插件进入当前插件中心。</div>
+                        </div>
+                        <span class="state-chip neutral">未入仓</span>
+                      </div>
+                      <div class="badge-row" style="margin-top: 10px;">
+                        <span class="mini-pill">oneshot</span>
+                        <span class="detail-badge">remote only</span>
+                      </div>
+                      <div class="market-actions">
+                        <button class="btn" disabled>安装到本地</button>
+                        <button class="btn btn-secondary">加入远程插件仓</button>
+                      </div>
+                    </div>
+
+                    <div class="card market-card">
+                      <div class="market-card-head">
+                        <div>
+                          <div class="market-card-title">
+                            <strong>Desktop Clipboard Bridge</strong>
+                            <span class="detail-badge">仅本地</span>
+                          </div>
+                          <div class="plugin-desc">只保留本地安装入口，没有远程仓入口。</div>
+                        </div>
+                        <span class="state-chip neutral">本地插件</span>
+                      </div>
+                      <div class="market-actions">
+                        <button class="btn btn-primary">安装到本地</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div class="card detail-card">
+                    <h3>市场页规则</h3>
+                    <ul style="margin: 10px 0 0 18px; color: var(--text-secondary); font-size: 13px; line-height: 1.7;">
+                      <li>主按钮保留本地安装语义</li>
+                      <li>次按钮承担“加入远程插件仓 / 已在远程仓 / 更新远程仓”</li>
+                      <li>点击加入或更新时，立即下载并固化仓快照</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="remote-view">
+          <div class="content-panel">
+            <div class="scrollable-content">
+              <div class="panel-header">
+                <div>
+                  <h2 class="section-title">远程 Agent</h2>
+                  <p class="section-desc">
+                    针对小窗默认展示，这里改成“先看列表，再进二级页”的结构。主页面只保留列表与轻量摘要；新增机器和机器详情都走覆盖式二级页。
+                  </p>
+                </div>
+                <div class="action-row">
+                  <button class="btn">刷新状态</button>
+                  <button class="btn btn-primary" id="open-remote-create-btn">新增远程机器</button>
+                </div>
+              </div>
+
+              <div class="sub-banner">
+                <div>
+                  <strong>列表页默认展示</strong>
+                  <span>不在默认页同时铺开创建表单和详情内容，避免小窗口下三层信息挤在一起。</span>
+                </div>
+                <div class="state-chip ok">3 台已配置</div>
+              </div>
+
+              <div class="meta-grid" style="margin-bottom: 18px;">
+                <div class="meta-card">
+                  <div class="label">在线机器</div>
+                  <div class="value">2</div>
+                </div>
+                <div class="meta-card">
+                  <div class="label">离线机器</div>
+                  <div class="value">1</div>
+                </div>
+                <div class="meta-card">
+                  <div class="label">待升级插件</div>
+                  <div class="value">4</div>
+                </div>
+                <div class="meta-card">
+                  <div class="label">最近错误</div>
+                  <div class="value">1</div>
+                </div>
+              </div>
+
+              <div class="machine-panel">
+                <div class="panel-heading">
+                  <h3 class="panel-title" style="margin: 0;">机器列表</h3>
+                  <button class="btn btn-primary" id="open-warehouse-from-remote-btn">打开远程插件仓</button>
+                </div>
+                <div class="machine-list">
+                  <div class="machine-item" data-remote-machine-trigger="vision">
+                    <div class="machine-top">
+                      <span class="machine-name">Vision Box 01</span>
+                      <span class="status-pill status-online">online</span>
+                    </div>
+                    <div class="machine-meta">linux · 10.12.0.22 · 已安装 7 个插件 · 最近心跳 9 秒前</div>
+                  </div>
+                  <div class="machine-item" data-remote-machine-trigger="lab">
+                    <div class="machine-top">
+                      <span class="machine-name">Lab Runner 02</span>
+                      <span class="status-pill status-online">online</span>
+                    </div>
+                    <div class="machine-meta">linux · 10.12.0.41 · 已安装 2 个插件 · 最近心跳 17 秒前</div>
+                  </div>
+                  <div class="machine-item" data-remote-machine-trigger="archive">
+                    <div class="machine-top">
+                      <span class="machine-name">Archive Node</span>
+                      <span class="status-pill status-offline">offline</span>
+                    </div>
+                    <div class="machine-meta">linux · 10.12.0.73 · 最近状态来自 14 小时前缓存</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="prototype-note">
+                对应代码锚点仍然是 `RemoteAgentSetting.vue`，但交互模式从“左右同时铺开”调整成更接近 `DetailPanel`
+                的二级页：列表是默认视图，新增机器和机器详情通过点击进入。
+              </div>
+            </div>
+
+            <div class="detail-panel" id="remote-create-panel">
+              <div class="detail-topbar">
+                <button class="icon-btn" id="close-remote-create-btn">←</button>
+                <div class="topbar-title">新增远程机器</div>
+                <div class="topbar-spacer"></div>
+              </div>
+
+              <div class="detail-scrollable">
+                <div class="card detail-card">
+                  <h3>新增远程机器</h3>
+                  <p>创建流程从列表页单独进入，不再占据默认主页面空间。</p>
+
+                  <div class="service-config" style="margin-top: 16px;">
+                    <div class="setting-item vertical">
+                      <label class="setting-label">
+                        <span>机器名称</span>
+                        <span class="setting-desc">用于区分不同 Linux 远程机器</span>
+                      </label>
+                      <input class="input" value="Vision Box 03" />
+                    </div>
+
+                    <div class="setting-item vertical">
+                      <label class="setting-label">
+                        <span>本机发布地址</span>
+                        <span class="setting-desc">远程机器需要能访问这个局域网地址</span>
+                      </label>
+                      <select class="input">
+                        <option>10.12.0.14</option>
+                      </select>
+                    </div>
+
+                    <div class="setting-item vertical">
+                      <label class="setting-label">
+                        <span>标签策略</span>
+                        <span class="setting-desc">控制这台机器可接收哪些插件标签</span>
+                      </label>
+                      <select class="input">
+                        <option>全部标签</option>
+                        <option>仅允许指定标签</option>
+                      </select>
+                    </div>
+
+                    <div class="setting-item vertical">
+                      <label class="setting-label">
+                        <span>允许标签</span>
+                        <span class="setting-desc">仅在“仅允许指定标签”时填写</span>
+                      </label>
+                      <input class="input" value="ocr,docs" />
+                    </div>
+
+                    <div class="action-row" style="margin-top: 8px;">
+                      <button class="btn">取消</button>
+                      <button class="btn btn-primary">生成安装命令</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-panel" id="remote-machine-panel">
+              <div class="detail-topbar">
+                <button class="icon-btn" id="close-remote-machine-btn">←</button>
+                <div class="topbar-title">远程机器详情</div>
+                <div class="topbar-spacer"></div>
+                <button class="btn btn-primary">打开批量同步</button>
+              </div>
+
+              <div class="detail-scrollable">
+                <div class="status-bar">
+                  <span class="status-dot"></span>
+                  <span class="status-text">Vision Box 01 在线 · 最近一次心跳 9 秒前</span>
+                </div>
+
+                <div class="card detail-card" style="margin-bottom: 16px;">
+                  <h3>安装命令</h3>
+                  <p>安装命令与接入动作保留在机器详情页里，而不是占据列表页默认空间。</p>
+                  <textarea class="command-box" rows="4" readonly>curl -fsSL http://10.12.0.14:37121/agent/install/ab12cd34.sh | sh</textarea>
+                  <div class="action-row" style="margin-top: 12px;">
+                    <button class="btn">重生成命令</button>
+                    <button class="btn btn-primary">复制命令</button>
+                  </div>
+                </div>
+
+                <div class="remote-layout">
+                  <div class="remote-main-stack">
+                    <div class="card detail-card">
+                      <h3>这台机器上的插件安装情况</h3>
+                      <p>这里是 agent 回传的事实视图。只有点进某台机器后才展开，符合小窗下的阅读密度。</p>
+
+                      <div class="server-plugin-status-list" style="margin-top: 14px;">
+                        <div class="server-plugin-status">
+                          <div class="server-plugin-head">
+                            <strong>Remote OCR Worker</strong>
+                            <span class="state-chip warn">需升级</span>
+                          </div>
+                          <div class="server-plugin-desc">service · 远端已安装 v1.5.0，本地目标 v1.6.2，可显示运行态</div>
+                          <div class="kv-grid">
+                            <div class="kv-box">
+                              <div class="k">安装状态</div>
+                              <div class="v">已安装</div>
+                            </div>
+                            <div class="kv-box">
+                              <div class="k">运行状态</div>
+                              <div class="v">running</div>
+                            </div>
+                            <div class="kv-box">
+                              <div class="k">配置</div>
+                              <div class="v">已保存</div>
+                            </div>
+                            <div class="kv-box">
+                              <div class="k">最近同步</div>
+                              <div class="v">10:24</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="server-plugin-status">
+                          <div class="server-plugin-head">
+                            <strong>Webhook Trigger</strong>
+                            <span class="state-chip ok">已安装</span>
+                          </div>
+                          <div class="server-plugin-desc">oneshot · 不显示常驻运行态，改为最近执行结果</div>
+                          <div class="kv-grid">
+                            <div class="kv-box">
+                              <div class="k">安装状态</div>
+                              <div class="v">已安装</div>
+                            </div>
+                            <div class="kv-box">
+                              <div class="k">最近执行</div>
+                              <div class="v">success</div>
+                            </div>
+                            <div class="kv-box">
+                              <div class="k">配置</div>
+                              <div class="v">缺失</div>
+                            </div>
+                            <div class="kv-box">
+                              <div class="k">最近同步</div>
+                              <div class="v">09:12</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="server-plugin-status">
+                          <div class="server-plugin-head">
+                            <strong>Markdown Snippet Pack</strong>
+                            <span class="state-chip neutral">static</span>
+                          </div>
+                          <div class="server-plugin-desc">static · 只展示安装、配置、最近同步，不展示运行态</div>
+                          <div class="kv-grid">
+                            <div class="kv-box">
+                              <div class="k">安装状态</div>
+                              <div class="v">已安装</div>
+                            </div>
+                            <div class="kv-box">
+                              <div class="k">运行状态</div>
+                              <div class="v">n/a</div>
+                            </div>
+                            <div class="kv-box">
+                              <div class="k">配置</div>
+                              <div class="v">不需要</div>
+                            </div>
+                            <div class="kv-box">
+                              <div class="k">最近同步</div>
+                              <div class="v">今天</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="card detail-card">
+                      <h3>最近同步日志</h3>
+                      <div class="timeline">
+                        <div class="timeline-item">
+                          <strong>10:24 · upgrade · success</strong>
+                          <span>Remote OCR Worker 升级成功，并自动下发该机器上的已保存配置。</span>
+                        </div>
+                        <div class="timeline-item">
+                          <strong>09:52 · configure · error</strong>
+                          <span>Webhook Trigger 缺少必填字段 `endpoint`，配置应用失败。</span>
+                        </div>
+                        <div class="timeline-item">
+                          <strong>09:31 · install · success</strong>
+                          <span>Markdown Snippet Pack 首次安装成功。</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="remote-side-stack">
+                    <div class="card detail-card">
+                      <h3>机器-插件配置</h3>
+                      <p>配置编辑主入口放在机器详情页中，和这台机器上的安装情况放在同一上下文里。</p>
+                      <select class="input" style="margin-top: 12px;">
+                        <option>Remote OCR Worker</option>
+                        <option>Webhook Trigger</option>
+                      </select>
+                      <div class="code-box">{
+  "listenPort": 37210,
+  "modelPath": "/srv/models/ocr-latest",
+  "maxWorkers": 2
+}</div>
+                      <div class="action-row" style="margin-top: 12px;">
+                        <button class="btn btn-primary">保存配置</button>
+                        <button class="btn">仅下发配置</button>
+                      </div>
+                    </div>
+
+                    <div class="card detail-card">
+                      <h3>可同步插件清单</h3>
+                      <p>作为补充信息保留，但不会在默认列表页全部展开。</p>
+                      <div class="deploy-list" style="margin-top: 12px;">
+                        <div class="deploy-item">
+                          <div class="plugin-main">
+                            <strong>Remote OCR Worker</strong>
+                            <span class="state-chip ok">可同步</span>
+                          </div>
+                          <div class="plugin-tags">linux · service · remoteSync</div>
+                        </div>
+                        <div class="deploy-item">
+                          <div class="plugin-main">
+                            <strong>Markdown Snippet Pack</strong>
+                            <span class="state-chip ok">可同步</span>
+                          </div>
+                          <div class="plugin-tags">linux · static · remoteSync</div>
+                        </div>
+                        <div class="deploy-item">
+                          <div class="plugin-main">
+                            <strong>Desktop Clipboard Bridge</strong>
+                            <span class="state-chip danger">不显示</span>
+                          </div>
+                          <div class="plugin-tags">缺少 remoteSync 声明</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="warehouse-view">
+          <div class="content-panel">
+            <div class="scrollable-content">
+              <div class="panel-header">
+                <div>
+                  <h2 class="section-title">远程插件仓</h2>
+                  <p class="section-desc">仓页与单服务器批量同步页合并。未选服务器时先看仓总览，选定服务器后再切到该机器视角。</p>
+                </div>
+                <div class="action-row">
+                  <button class="btn">刷新仓状态</button>
+                  <button class="btn btn-secondary">查看不可分发条目</button>
+                </div>
+              </div>
+
+              <div class="warehouse-grid">
+                <div>
+                  <div class="warehouse-toolbar">
+                    <div>
+                      <strong style="font-size: 15px;">未选服务器时的仓总览</strong>
+                      <div class="section-desc" style="margin: 6px 0 0;">先管理仓条目和版本快照，不提前进入某台机器上下文。</div>
+                    </div>
+                    <div class="warehouse-state-toggle">
+                      <button class="btn btn-secondary" id="warehouse-overview-btn">仓总览</button>
+                      <button class="btn" id="warehouse-server-view-btn">示例服务器视角</button>
+                    </div>
+                  </div>
+
+                  <div class="warehouse-overview" id="warehouse-overview-state">
+                    <div class="overview-card">
+                      <div class="label">仓条目总数</div>
+                      <div class="value">12</div>
+                    </div>
+                    <div class="overview-card">
+                      <div class="label">可更新</div>
+                      <div class="value">3</div>
+                    </div>
+                    <div class="overview-card">
+                      <div class="label">service</div>
+                      <div class="value">5</div>
+                    </div>
+                    <div class="overview-card">
+                      <div class="label">仅远程</div>
+                      <div class="value">4</div>
+                    </div>
+                  </div>
+
+                  <div class="warehouse-filter-bar">
+                    <span class="filter-pill active">可更新优先</span>
+                    <span class="filter-pill">全部条目</span>
+                    <span class="filter-pill">仅本地 + 远程</span>
+                    <span class="filter-pill">仅远程</span>
+                  </div>
+
+                  <div class="warehouse-list" id="warehouse-overview-list">
+                    <div class="card warehouse-card">
+                      <div class="warehouse-card-head">
+                        <div>
+                          <div class="warehouse-card-title">
+                            <strong>Remote OCR Worker</strong>
+                            <span class="detail-badge">v1.5.0 snapshot</span>
+                          </div>
+                          <div class="plugin-desc">市场最新 v1.6.2，可更新。该仓条目已被 2 台服务器使用。</div>
+                        </div>
+                        <span class="state-chip warn">可更新</span>
+                      </div>
+                      <div class="market-actions">
+                        <button class="btn btn-secondary">更新远程仓</button>
+                        <button class="btn">查看服务器影响</button>
+                      </div>
+                    </div>
+
+                    <div class="card warehouse-card">
+                      <div class="warehouse-card-head">
+                        <div>
+                          <div class="warehouse-card-title">
+                            <strong>Webhook Trigger</strong>
+                            <span class="detail-badge">v2.0.1 snapshot</span>
+                          </div>
+                          <div class="plugin-desc">仅远程分发条目，暂无本地安装关系，但可被分发到支持机器。</div>
+                        </div>
+                        <span class="state-chip ok">最新</span>
+                      </div>
+                    </div>
+
+                    <div class="card warehouse-card">
+                      <div class="warehouse-card-head">
+                        <div>
+                          <div class="warehouse-card-title">
+                            <strong>Markdown Snippet Pack</strong>
+                            <span class="detail-badge">v0.9.4 snapshot</span>
+                          </div>
+                          <div class="plugin-desc">static 条目。当前无市场更新，但对部分机器因标签不匹配不可分发。</div>
+                        </div>
+                        <span class="state-chip neutral">最新</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div id="warehouse-server-state" style="display: none;">
+                    <div class="sub-banner">
+                      <div>
+                        <strong>当前目标服务器：Vision Box 01</strong>
+                        <span>只展示对这台服务器可分发的仓条目；不可分发条目需要主动切换查看。</span>
+                      </div>
+                      <button class="btn btn-primary">同步已选仓条目</button>
+                    </div>
+
+                    <div class="warehouse-filter-bar">
+                      <span class="filter-pill active">可分发</span>
+                      <span class="filter-pill">查看不可分发条目</span>
+                      <span class="filter-pill">仅未安装</span>
+                      <span class="filter-pill">仅需升级</span>
+                    </div>
+
+                    <div class="table">
+                      <div class="table-header">
+                        <div>仓条目</div>
+                        <div>模型</div>
+                        <div>服务器状态</div>
+                        <div>配置</div>
+                        <div>仓快照</div>
+                        <div>选择</div>
+                      </div>
+                      <div class="table-row">
+                        <div>
+                          <strong>Remote OCR Worker</strong>
+                          <small>远端 v1.5.0，仓快照 v1.5.0，可更新到市场 v1.6.2</small>
+                        </div>
+                        <div><span class="mini-pill">service</span></div>
+                        <div><span class="state-chip warn">需升级</span></div>
+                        <div><span class="state-chip ok">已保存</span></div>
+                        <div>v1.5.0</div>
+                        <div><span class="state-chip ok">已选</span></div>
+                      </div>
+                      <div class="table-row">
+                        <div>
+                          <strong>Webhook Trigger</strong>
+                          <small>远端未安装，仓快照 v2.0.1</small>
+                        </div>
+                        <div><span class="mini-pill">oneshot</span></div>
+                        <div><span class="state-chip neutral">未安装</span></div>
+                        <div><span class="state-chip warn">缺配置</span></div>
+                        <div>v2.0.1</div>
+                        <div><span class="state-chip ok">已选</span></div>
+                      </div>
+                      <div class="table-row">
+                        <div>
+                          <strong>Markdown Snippet Pack</strong>
+                          <small>远端未安装，仓快照 v0.9.4</small>
+                        </div>
+                        <div><span class="mini-pill">static</span></div>
+                        <div><span class="state-chip neutral">未安装</span></div>
+                        <div><span class="state-chip neutral">无配置</span></div>
+                        <div>v0.9.4</div>
+                        <div><span class="state-chip neutral">未选</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div class="card detail-card">
+                    <h3>选择目标服务器</h3>
+                    <p>默认不预选服务器。只有显式选中后，仓页才进入某台机器的分发上下文。</p>
+                    <div class="server-selector-list">
+                      <div class="server-selector-item">
+                        <div>
+                          <strong>Vision Box 01</strong>
+                          <span>online · 可分发 8 条 · 未安装 3 条</span>
+                        </div>
+                        <button class="btn btn-primary" id="warehouse-select-vision-btn">选择</button>
+                      </div>
+                      <div class="server-selector-item">
+                        <div>
+                          <strong>Lab Runner 02</strong>
+                          <span>online · 可分发 5 条 · 已安装 2 条</span>
+                        </div>
+                        <button class="btn">选择</button>
+                      </div>
+                      <div class="server-selector-item">
+                        <div>
+                          <strong>Archive Node</strong>
+                          <span>offline · 当前不可操作，但可用于查看历史状态</span>
+                        </div>
+                        <button class="btn">查看</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="card detail-card" style="margin-top: 16px;">
+                    <h3>仓页规则</h3>
+                    <ul style="margin: 10px 0 0 18px; color: var(--text-secondary); font-size: 13px; line-height: 1.7;">
+                      <li>仓页统一管理仓快照与单服务器批量同步</li>
+                      <li>默认先看仓条目，再显式选服务器</li>
+                      <li>选中服务器后只默认看可分发条目</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const menuItems = document.querySelectorAll("[data-menu-target]");
+      const views = document.querySelectorAll(".view");
+      const detailPanel = document.getElementById("plugin-detail-panel");
+      const remoteCreatePanel = document.getElementById("remote-create-panel");
+      const remoteMachinePanel = document.getElementById("remote-machine-panel");
+      const pluginSyncSubpanel = document.getElementById("plugin-sync-subpanel");
+      const openDetailBtn = document.getElementById("open-detail-btn");
+      const closeDetailBtn = document.getElementById("close-detail-btn");
+      const openPluginSyncSubpanelBtn = document.getElementById("open-plugin-sync-subpanel-btn");
+      const closePluginSyncSubpanelBtn = document.getElementById("close-plugin-sync-subpanel-btn");
+      const openRemoteCreateBtn = document.getElementById("open-remote-create-btn");
+      const closeRemoteCreateBtn = document.getElementById("close-remote-create-btn");
+      const closeRemoteMachineBtn = document.getElementById("close-remote-machine-btn");
+      const remoteMachineTriggers = document.querySelectorAll("[data-remote-machine-trigger]");
+      const openWarehouseFromRemoteBtn = document.getElementById("open-warehouse-from-remote-btn");
+      const warehouseOverviewBtn = document.getElementById("warehouse-overview-btn");
+      const warehouseServerViewBtn = document.getElementById("warehouse-server-view-btn");
+      const warehouseOverviewState = document.getElementById("warehouse-overview-state");
+      const warehouseOverviewList = document.getElementById("warehouse-overview-list");
+      const warehouseServerState = document.getElementById("warehouse-server-state");
+      const warehouseSelectVisionBtn = document.getElementById("warehouse-select-vision-btn");
+
+      function activateView(targetId) {
+        menuItems.forEach((item) => {
+          item.classList.toggle("active", item.getAttribute("data-menu-target") === targetId);
+        });
+
+        views.forEach((view) => {
+          view.classList.toggle("active", view.id === targetId);
+        });
+
+        if (detailPanel) {
+          detailPanel.classList.remove("active");
+        }
+        if (pluginSyncSubpanel) {
+          pluginSyncSubpanel.classList.remove("active");
+        }
+        if (remoteCreatePanel) {
+          remoteCreatePanel.classList.remove("active");
+        }
+        if (remoteMachinePanel) {
+          remoteMachinePanel.classList.remove("active");
+        }
+      }
+
+      menuItems.forEach((item) => {
+        item.addEventListener("click", () => {
+          const target = item.getAttribute("data-menu-target");
+          activateView(target);
+        });
+      });
+
+      if (openDetailBtn && detailPanel) {
+        openDetailBtn.addEventListener("click", () => {
+          activateView("plugins-view");
+          detailPanel.classList.add("active");
+        });
+      }
+
+      if (closeDetailBtn && detailPanel) {
+        closeDetailBtn.addEventListener("click", () => {
+          detailPanel.classList.remove("active");
+          if (pluginSyncSubpanel) {
+            pluginSyncSubpanel.classList.remove("active");
+          }
+        });
+      }
+
+      if (openPluginSyncSubpanelBtn && pluginSyncSubpanel) {
+        openPluginSyncSubpanelBtn.addEventListener("click", () => {
+          pluginSyncSubpanel.classList.add("active");
+        });
+      }
+
+      if (closePluginSyncSubpanelBtn && pluginSyncSubpanel) {
+        closePluginSyncSubpanelBtn.addEventListener("click", () => {
+          pluginSyncSubpanel.classList.remove("active");
+        });
+      }
+
+      if (openRemoteCreateBtn && remoteCreatePanel) {
+        openRemoteCreateBtn.addEventListener("click", () => {
+          activateView("remote-view");
+          remoteCreatePanel.classList.add("active");
+        });
+      }
+
+      if (closeRemoteCreateBtn && remoteCreatePanel) {
+        closeRemoteCreateBtn.addEventListener("click", () => {
+          remoteCreatePanel.classList.remove("active");
+        });
+      }
+
+      if (closeRemoteMachineBtn && remoteMachinePanel) {
+        closeRemoteMachineBtn.addEventListener("click", () => {
+          remoteMachinePanel.classList.remove("active");
+        });
+      }
+
+      remoteMachineTriggers.forEach((trigger) => {
+        trigger.addEventListener("click", () => {
+          activateView("remote-view");
+          if (remoteMachinePanel) {
+            remoteMachinePanel.classList.add("active");
+          }
+        });
+      });
+
+      function showWarehouseOverview() {
+        if (warehouseOverviewState) warehouseOverviewState.style.display = "";
+        if (warehouseOverviewList) warehouseOverviewList.style.display = "";
+        if (warehouseServerState) warehouseServerState.style.display = "none";
+      }
+
+      function showWarehouseServerState() {
+        if (warehouseOverviewState) warehouseOverviewState.style.display = "none";
+        if (warehouseOverviewList) warehouseOverviewList.style.display = "none";
+        if (warehouseServerState) warehouseServerState.style.display = "";
+      }
+
+      if (warehouseOverviewBtn) {
+        warehouseOverviewBtn.addEventListener("click", () => {
+          activateView("warehouse-view");
+          showWarehouseOverview();
+        });
+      }
+
+      if (warehouseServerViewBtn) {
+        warehouseServerViewBtn.addEventListener("click", () => {
+          activateView("warehouse-view");
+          showWarehouseServerState();
+        });
+      }
+
+      if (warehouseSelectVisionBtn) {
+        warehouseSelectVisionBtn.addEventListener("click", () => {
+          activateView("warehouse-view");
+          showWarehouseServerState();
+        });
+      }
+
+      if (openWarehouseFromRemoteBtn) {
+        openWarehouseFromRemoteBtn.addEventListener("click", () => {
+          activateView("warehouse-view");
+          showWarehouseServerState();
+        });
+      }
+
+      showWarehouseOverview();
+    </script>
+  </body>
+</html>
