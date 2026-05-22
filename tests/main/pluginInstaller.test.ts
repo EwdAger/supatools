@@ -57,6 +57,7 @@ describe('PluginInstallerAPI', () => {
 
     expect(plugin.platform).toEqual(['linux', 'win32'])
     expect(plugin.tags).toEqual(['scp', 'hci'])
+    expect(plugin.remoteSync).toBe(false)
     expect(mockDbPut).toHaveBeenCalledWith(
       'plugins',
       expect.arrayContaining([
@@ -67,5 +68,53 @@ describe('PluginInstallerAPI', () => {
         })
       ])
     )
+  })
+
+  it('persists remote metadata in installed plugin records', () => {
+    const api = new PluginInstallerAPI({
+      mainWindow: null,
+      pluginManager: null,
+      devProjects: {} as any,
+      getPlugins: vi.fn(async () => []),
+      readInstalledPlugins: vi.fn(() => []),
+      writeInstalledPlugins: vi.fn(),
+      notifyPluginsChanged: vi.fn(),
+      validatePluginConfig: vi.fn(() => ({ valid: true }))
+    })
+
+    const plugin = (api as any).persistPlugin(
+      {
+        name: 'demo',
+        title: 'Demo',
+        version: '1.0.0',
+        features: [],
+        remoteSync: true,
+        runtimeModel: 'service',
+        local: { entry: 'local/index.js' },
+        remote: {
+          entry: 'remote/index.js',
+          actions: {
+            fetch_password: {
+              input: { type: 'object' },
+              output: { type: 'object' }
+            }
+          }
+        }
+      },
+      '/plugins/demo'
+    )
+
+    expect(plugin.remoteSync).toBe(true)
+    expect(plugin.runtimeModel).toBe('service')
+    expect(plugin.local).toEqual({ entry: 'local/index.js' })
+    expect(plugin.remote).toEqual({
+      entry: 'remote/index.js',
+      actions: {
+        fetch_password: {
+          input: { type: 'object' },
+          output: { type: 'object' }
+        }
+      }
+    })
   })
 })

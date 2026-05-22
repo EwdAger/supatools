@@ -1,6 +1,11 @@
 import path from 'path'
 import { toDevPluginName } from '../../../shared/pluginRuntimeNamespace'
-import { normalizePluginMetadata } from '../../../shared/pluginMetadata'
+import {
+  normalizePluginMetadata,
+  type PluginLocalMetadata,
+  type PluginRemoteMetadata,
+  type PluginRuntimeModel
+} from '../../../shared/pluginMetadata'
 
 // ============================================================
 // Types
@@ -32,6 +37,14 @@ export type PluginManifestSnapshot = {
   platform?: string[]
   /** 插件标签列表，如 ["scp", "hci"] */
   tags?: string[]
+  /** 是否支持远程同步 */
+  remoteSync?: boolean
+  /** 插件运行模型 */
+  runtimeModel?: PluginRuntimeModel
+  /** 本地入口声明 */
+  local?: PluginLocalMetadata
+  /** 远端入口与动作契约声明 */
+  remote?: PluginRemoteMetadata
 }
 
 /** 已安装插件的快照记录，用于注册表与安装列表的交互 */
@@ -48,6 +61,10 @@ export type PluginInstallRecord = {
   features?: any[]
   platform?: string[]
   tags?: string[]
+  remoteSync?: boolean
+  runtimeModel?: PluginRuntimeModel
+  local?: PluginLocalMetadata
+  remote?: PluginRemoteMetadata
   /** 插件的本地目录路径 */
   path?: string
   /** 是否为开发模式安装 */
@@ -204,11 +221,16 @@ function normalizeOptionalPath(value: unknown): string | null {
 export function normalizePluginManifestSnapshot(
   snapshot: PluginManifestSnapshot
 ): PluginManifestSnapshot {
-  const { platform, tags } = normalizePluginMetadata(snapshot)
+  const { platform, tags, remoteSync, runtimeModel, local, remote } =
+    normalizePluginMetadata(snapshot)
   return {
     ...snapshot,
     platform,
-    tags
+    tags,
+    remoteSync,
+    runtimeModel,
+    ...(local ? { local } : {}),
+    ...(remote ? { remote } : {})
   }
 }
 
@@ -532,7 +554,8 @@ export function buildInstalledDevelopmentPlugin(
 ): PluginInstallRecord {
   const normalizedPath = resolvePath(pluginPath)
   const baseName = pluginConfig.name || path.basename(normalizedPath)
-  const { platform, tags } = normalizePluginMetadata(pluginConfig)
+  const { platform, tags, remoteSync, runtimeModel, local, remote } =
+    normalizePluginMetadata(pluginConfig)
   // 内置插件（setting、system）在开发模式下仅设 isDevelopment: true 而不加 __dev 后缀
   const effectiveName = BUILT_IN_NAMES.has(baseName) ? baseName : toDevPluginName(baseName)
   return {
@@ -548,6 +571,10 @@ export function buildInstalledDevelopmentPlugin(
     features: Array.isArray(pluginConfig.features) ? pluginConfig.features : [],
     platform,
     tags,
+    remoteSync,
+    runtimeModel,
+    ...(local ? { local } : {}),
+    ...(remote ? { remote } : {}),
     path: normalizedPath,
     isDevelopment: true,
     installedAt: nowIso()

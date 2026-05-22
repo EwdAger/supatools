@@ -560,7 +560,8 @@ export class PluginInstallerAPI {
    * 根据插件配置构建 pluginInfo 对象，写入数据库并返回该对象。
    */
   private persistPlugin(config: any, pluginPath: string, extra?: Record<string, any>): any {
-    const { platform, tags } = normalizePluginMetadata(config)
+    const { platform, tags, remoteSync, runtimeModel, local, remote } =
+      normalizePluginMetadata(config)
     const pluginInfo = {
       name: config.name,
       title: config.title,
@@ -574,6 +575,10 @@ export class PluginInstallerAPI {
       features: config.features,
       platform,
       tags,
+      remoteSync,
+      runtimeModel,
+      ...(local ? { local } : {}),
+      ...(remote ? { remote } : {}),
       path: pluginPath,
       isDevelopment: false,
       installedAt: new Date().toISOString(),

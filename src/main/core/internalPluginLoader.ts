@@ -43,7 +43,8 @@ export function loadInternalPlugins(): void {
       }
 
       const pluginConfig = JSON.parse(fsSync.readFileSync(pluginJsonPath, 'utf-8'))
-      const { platform, tags } = normalizePluginMetadata(pluginConfig)
+      const { platform, tags, remoteSync, runtimeModel, local, remote } =
+        normalizePluginMetadata(pluginConfig)
 
       // 构建插件信息
       const logoPath = pluginConfig.logo ? path.join(effectivePluginPath, pluginConfig.logo) : ''
@@ -66,6 +67,10 @@ export function loadInternalPlugins(): void {
         features: pluginConfig.features || [],
         platform,
         tags,
+        remoteSync,
+        runtimeModel,
+        ...(local ? { local } : {}),
+        ...(remote ? { remote } : {}),
         isDevelopment: isDev,
         main: mainPath
       }

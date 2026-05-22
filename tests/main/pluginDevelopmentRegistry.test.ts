@@ -41,6 +41,41 @@ describe('pluginDevelopmentRegistry', () => {
     expect(installed.tags).toEqual(['scp', 'hci'])
   })
 
+  it('builds the installed snapshot with remote metadata contracts', () => {
+    const installed = buildInstalledDevelopmentPlugin('/workspace/demo', {
+      name: 'demo',
+      title: 'Demo',
+      version: '1.0.0',
+      features: [{ code: 'ui.demo', cmds: ['Demo'] }],
+      remoteSync: true,
+      runtimeModel: 'service',
+      local: { entry: 'local/index.js' },
+      remote: {
+        entry: 'remote/index.js',
+        actions: {
+          fetch_password: {
+            input: { type: 'object' },
+            output: { type: 'object' }
+          }
+        }
+      },
+      development: { main: 'http://localhost:8686/' }
+    })
+
+    expect(installed.remoteSync).toBe(true)
+    expect(installed.runtimeModel).toBe('service')
+    expect(installed.local).toEqual({ entry: 'local/index.js' })
+    expect(installed.remote).toEqual({
+      entry: 'remote/index.js',
+      actions: {
+        fetch_password: {
+          input: { type: 'object' },
+          output: { type: 'object' }
+        }
+      }
+    })
+  })
+
   it('rejects upsert when config name collides with different path', () => {
     const registry = {
       version: 3,
