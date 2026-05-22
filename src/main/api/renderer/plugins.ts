@@ -18,6 +18,13 @@ import {
   getPluginDataPrefix,
   isDevelopmentPluginName
 } from '../../../shared/pluginRuntimeNamespace'
+import {
+  REMOTE_PLUGIN_WAREHOUSE_DB_KEY,
+  type RemotePluginWarehouseDoc,
+  type RemotePluginWarehouseEntry,
+  createEmptyRemotePluginWarehouseDoc
+} from '../../../shared/remotePluginWarehouse'
+import { readRemotePluginWarehouse, upsertWarehouseEntry } from './remotePluginWarehouseRegistry'
 
 // 插件目录
 const DISABLED_PLUGINS_KEY = 'disabled-plugins'
@@ -321,6 +328,23 @@ export class PluginsAPI {
   private readInstalledPlugins(): any[] {
     const plugins = databaseAPI.dbGet('plugins')
     return Array.isArray(plugins) ? plugins : []
+  }
+
+  public readRemotePluginWarehouse(): RemotePluginWarehouseDoc {
+    return readRemotePluginWarehouse(databaseAPI.dbGet(REMOTE_PLUGIN_WAREHOUSE_DB_KEY))
+  }
+
+  public writeRemotePluginWarehouse(doc: RemotePluginWarehouseDoc): void {
+    databaseAPI.dbPut(REMOTE_PLUGIN_WAREHOUSE_DB_KEY, doc)
+  }
+
+  public upsertRemotePluginWarehouseEntry(
+    entry: RemotePluginWarehouseEntry
+  ): RemotePluginWarehouseEntry {
+    const current = this.readRemotePluginWarehouse()
+    const nextDoc = upsertWarehouseEntry(current || createEmptyRemotePluginWarehouseDoc(), entry)
+    this.writeRemotePluginWarehouse(nextDoc)
+    return entry
   }
 
   private writeInstalledPlugins(plugins: any[]): void {
@@ -682,35 +706,35 @@ export class PluginsAPI {
   }
 
   private rewriteRemoteReadmeContent(content: string, baseUrl: string): string {
-      // 替换 Markdown 图片语法：![alt](path)
-      content = content.replace(/!\[([^\]]*)\]\((?!http)([^)]+)\)/g, (_match, alt, imgPath) => {
-        const cleanPath = imgPath.replace(/^\.\//, '')
-        return `![${alt}](${baseUrl}/${cleanPath})`
-      })
+    // 替换 Markdown 图片语法：![alt](path)
+    content = content.replace(/!\[([^\]]*)\]\((?!http)([^)]+)\)/g, (_match, alt, imgPath) => {
+      const cleanPath = imgPath.replace(/^\.\//, '')
+      return `![${alt}](${baseUrl}/${cleanPath})`
+    })
 
-      // 替换 HTML img 标签的 src 属性
-      content = content.replace(
-        /<img([^>]*?)src=["'](?!http)([^"']+)["']([^>]*?)>/gi,
-        (_match, before, src, after) => {
-          const cleanSrc = src.replace(/^\.\//, '')
-          return `<img${before}src="${baseUrl}/${cleanSrc}"${after}>`
-        }
-      )
+    // 替换 HTML img 标签的 src 属性
+    content = content.replace(
+      /<img([^>]*?)src=["'](?!http)([^"']+)["']([^>]*?)>/gi,
+      (_match, before, src, after) => {
+        const cleanSrc = src.replace(/^\.\//, '')
+        return `<img${before}src="${baseUrl}/${cleanSrc}"${after}>`
+      }
+    )
 
-      // 替换 Markdown 链接语法（排除锚点链接 #）
-      content = content.replace(/\[([^\]]+)\]\((?!http|#)([^)]+)\)/g, (_match, text, linkPath) => {
-        const cleanPath = linkPath.replace(/^\.\//, '')
-        return `[${text}](${baseUrl}/${cleanPath})`
-      })
+    // 替换 Markdown 链接语法（排除锚点链接 #）
+    content = content.replace(/\[([^\]]+)\]\((?!http|#)([^)]+)\)/g, (_match, text, linkPath) => {
+      const cleanPath = linkPath.replace(/^\.\//, '')
+      return `[${text}](${baseUrl}/${cleanPath})`
+    })
 
-      // 替换 HTML a 标签的 href 属性（排除锚点链接和外部链接）
-      content = content.replace(
-        /<a([^>]*?)href=["'](?!http|#)([^"']+)["']([^>]*?)>/gi,
-        (_match, before, href, after) => {
-          const cleanHref = href.replace(/^\.\//, '')
-          return `<a${before}href="${baseUrl}/${cleanHref}"${after}>`
-        }
-      )
+    // 替换 HTML a 标签的 href 属性（排除锚点链接和外部链接）
+    content = content.replace(
+      /<a([^>]*?)href=["'](?!http|#)([^"']+)["']([^>]*?)>/gi,
+      (_match, before, href, after) => {
+        const cleanHref = href.replace(/^\.\//, '')
+        return `<a${before}href="${baseUrl}/${cleanHref}"${after}>`
+      }
+    )
 
     return content
   }
