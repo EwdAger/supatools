@@ -73,3 +73,37 @@ Switched the wrap-up work onto a non-main branch, completed the Trellis archive 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Bootstrap project guidelines
+
+**Date**: 2026-05-22
+**Task**: Bootstrap project guidelines
+**Package**: ztools-plugin-cli
+**Branch**: `chore/finish-remote-plugin-sync-wrap-up`
+
+### Summary
+
+Filled the Trellis spec scaffolding with project-specific backend and frontend guidelines for ztools-plugin-cli, and documented the real sync-script-driven status of ztools-api-types.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `130feeb` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

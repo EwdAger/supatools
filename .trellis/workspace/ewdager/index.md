@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 2
-- **Last Active**: 2026-05-21
+- **Total Sessions**: 3
+- **Last Active**: 2026-05-22
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~75 | Active |
+| `journal-1.md` | ~109 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 3 | 2026-05-22 | Bootstrap project guidelines | `130feeb` | `chore/finish-remote-plugin-sync-wrap-up` |
 | 2 | 2026-05-21 | Finish remote plugin sync wrap-up | `1909b81` | `chore/finish-remote-plugin-sync-wrap-up` |
 | 1 | 2026-05-21 | Remote plugin sync planning and prototype | `635a01f` | `main` |
 <!-- @@@/auto:session-history -->
