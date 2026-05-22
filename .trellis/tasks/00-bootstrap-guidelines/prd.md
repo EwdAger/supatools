@@ -21,9 +21,9 @@ the rest conversationally.
 
 ## Status (update the checkboxes as you complete each item)
 
-- [ ] Fill guidelines for ztools-plugin-cli
-- [ ] Fill guidelines for ztools-api-types
-- [ ] Add code examples
+- [x] Fill guidelines for ztools-plugin-cli
+- [x] Fill guidelines for ztools-api-types
+- [x] Add code examples
 
 ---
 
