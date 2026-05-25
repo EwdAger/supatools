@@ -850,6 +850,10 @@ window.ztools = {
       await electron.ipcRenderer.invoke('internal:remote-agent-sync', machineId),
     listRemoteAgentSyncJobs: async (machineId) =>
       await electron.ipcRenderer.invoke('internal:remote-agent-sync-jobs', machineId),
+    getRemoteAgentInfo: async (machineId) =>
+      await electron.ipcRenderer.invoke('internal:remote-agent-info', machineId),
+    listRemoteAgentInstalledPlugins: async (machineId) =>
+      await electron.ipcRenderer.invoke('internal:remote-agent-installed-plugins', machineId),
     updateDevProjectsOrder: async (pluginNames) =>
       await electron.ipcRenderer.invoke('internal:update-dev-projects-order', pluginNames),
     readPluginInfoFromZpx: async (zpxPath) =>

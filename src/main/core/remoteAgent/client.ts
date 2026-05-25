@@ -1,4 +1,5 @@
 import { httpGet, httpPost } from '../../utils/httpRequest'
+import type { RemoteAgentInfo, RemoteAgentPluginStatus } from '../../../shared/remoteAgent'
 
 export class RemoteAgentClient {
   private readonly baseUrl: string
@@ -7,12 +8,12 @@ export class RemoteAgentClient {
     this.baseUrl = baseUrl.replace(/\/+$/, '')
   }
 
-  public async getInfo(): Promise<any> {
-    return (await httpGet(`${this.baseUrl}/api/agent/info`)).data
+  public async getInfo(): Promise<RemoteAgentInfo> {
+    return (await httpGet(`${this.baseUrl}/api/agent/info`)).data as RemoteAgentInfo
   }
 
-  public async listPlugins(): Promise<any[]> {
-    return (await httpGet(`${this.baseUrl}/api/plugins`)).data as any[]
+  public async listPlugins(): Promise<RemoteAgentPluginStatus[]> {
+    return (await httpGet(`${this.baseUrl}/api/plugins`)).data as RemoteAgentPluginStatus[]
   }
 
   public async installPlugin(payload: Record<string, unknown>): Promise<any> {

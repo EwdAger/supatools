@@ -1,7 +1,5 @@
 import { createServer, IncomingMessage, Server, ServerResponse } from 'http'
-import type {
-  PendingRemoteAgentRecord
-} from '../../../shared/remoteAgent'
+import type { PendingRemoteAgentRecord } from '../../../shared/remoteAgent'
 
 type RemoteAgentOnboardingServiceDeps = {
   findPendingRecordByToken: (token: string) => PendingRemoteAgentRecord | null
@@ -11,6 +9,8 @@ type RemoteAgentOnboardingServiceDeps = {
     agentBaseUrl: string
     agentVersion: string
     lastSeenAt: string
+    agentPid?: number
+    agentLogPath?: string
   }) => Promise<{ success: boolean; error?: string }>
 }
 
@@ -63,18 +63,33 @@ function buildBootstrapAgentSource(): string {
 import http.server
 import json
 import os
+import signal
 import socketserver
 import sys
+import time
 from urllib.parse import urlparse
 
 ROOT = os.path.expanduser("~/.ztools-agent")
 PLUGINS_DIR = os.path.join(ROOT, "plugins")
 CONFIGS_DIR = os.path.join(ROOT, "configs")
 STATE_FILE = os.path.join(ROOT, "state.json")
+RUNTIME_FILE = os.path.join(ROOT, "runtime.json")
+PID_FILE = os.path.join(ROOT, "agent.pid")
+LOG_FILE = os.path.join(ROOT, "agent.log")
 PORT = int(os.environ.get("AGENT_PORT", "37122"))
 
 os.makedirs(PLUGINS_DIR, exist_ok=True)
 os.makedirs(CONFIGS_DIR, exist_ok=True)
+
+def write_runtime(state):
+    with open(RUNTIME_FILE, "w", encoding="utf-8") as fh:
+        json.dump(state, fh, ensure_ascii=False, indent=2)
+
+def load_runtime():
+    if not os.path.exists(RUNTIME_FILE):
+        return {}
+    with open(RUNTIME_FILE, "r", encoding="utf-8") as fh:
+        return json.load(fh)
 
 def load_state():
     if not os.path.exists(STATE_FILE):
@@ -85,6 +100,53 @@ def load_state():
 def save_state(state):
     with open(STATE_FILE, "w", encoding="utf-8") as fh:
         json.dump(state, fh, ensure_ascii=False, indent=2)
+
+def detect_runtime_model(name):
+    cfg_path = os.path.join(CONFIGS_DIR, f"{name}.meta.json")
+    if os.path.exists(cfg_path):
+        try:
+            with open(cfg_path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+                value = data.get("runtimeModel")
+                if value in ("static", "oneshot", "service"):
+                    return value
+        except Exception:
+            pass
+    return "service"
+
+def plugin_status_payload(name, meta):
+    runtime_model = detect_runtime_model(name)
+    payload = {
+        "name": name,
+        "version": meta.get("version", "0.0.0"),
+        "runtimeModel": runtime_model,
+        "lastSyncAt": meta.get("lastSyncAt"),
+        "lastError": meta.get("lastError")
+    }
+
+    config_path = os.path.join(CONFIGS_DIR, f"{name}.json")
+    if runtime_model == "static":
+        payload["configStatus"] = "not_required"
+    else:
+        payload["configStatus"] = "saved" if os.path.exists(config_path) else "missing"
+
+    if runtime_model == "service":
+        payload["runtimeStatus"] = meta.get("runtimeStatus", "running")
+    elif runtime_model == "oneshot":
+        payload["lastRunStatus"] = meta.get("lastRunStatus")
+
+    return payload
+
+with open(PID_FILE, "w", encoding="utf-8") as fh:
+    fh.write(str(os.getpid()))
+
+write_runtime({
+    "pid": os.getpid(),
+    "logPath": LOG_FILE,
+    "agentVersion": os.environ.get("AGENT_VERSION", "0.1.0-bootstrap"),
+    "machineId": os.environ.get("AGENT_MACHINE_ID", ""),
+    "startedAt": int(time.time())
+})
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def _send(self, status, payload):
@@ -107,20 +169,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         state = load_state()
         if path == "/api/agent/info":
+            runtime = load_runtime()
             self._send(200, {
                 "machineId": os.environ.get("AGENT_MACHINE_ID", ""),
                 "platform": "linux",
                 "agentVersion": os.environ.get("AGENT_VERSION", "0.1.0-bootstrap"),
-                "status": "online"
+                "status": "online",
+                "pid": runtime.get("pid"),
+                "logPath": runtime.get("logPath")
             })
             return
         if path == "/api/plugins":
-            plugins = []
-            for name, meta in state.get("plugins", {}).items():
-                plugins.append({
-                    "name": name,
-                    "version": meta.get("version", "0.0.0")
-                })
+            plugins = [plugin_status_payload(name, meta) for name, meta in state.get("plugins", {}).items()]
             self._send(200, plugins)
             return
         self._send(404, {"error": "not found"})
@@ -132,13 +192,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/api/plugins/install":
             name = payload.get("name")
             version = payload.get("version")
+            runtime_model = payload.get("runtimeModel")
             plugin_dir = os.path.join(PLUGINS_DIR, str(name))
             os.makedirs(plugin_dir, exist_ok=True)
             package_data = payload.get("packageData")
             if isinstance(package_data, str):
                 with open(os.path.join(plugin_dir, "plugin.zpx.b64"), "w", encoding="utf-8") as fh:
                     fh.write(package_data)
-            state.setdefault("plugins", {})[str(name)] = {"version": version}
+            with open(os.path.join(CONFIGS_DIR, f"{name}.meta.json"), "w", encoding="utf-8") as fh:
+                json.dump({
+                    "runtimeModel": runtime_model if runtime_model in ("static", "oneshot", "service") else "service"
+                }, fh, ensure_ascii=False, indent=2)
+            state.setdefault("plugins", {})[str(name)] = {
+                "version": version,
+                "lastSyncAt": int(time.time()),
+                "runtimeStatus": "running" if runtime_model == "service" else None
+            }
             save_state(state)
             self._send(200, {"success": True})
             return
@@ -146,15 +215,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
             name = payload.get("pluginName")
             with open(os.path.join(CONFIGS_DIR, f"{name}.json"), "w", encoding="utf-8") as fh:
                 json.dump(payload.get("config", {}), fh, ensure_ascii=False, indent=2)
+            state.setdefault("plugins", {}).setdefault(str(name), {})["lastSyncAt"] = int(time.time())
+            save_state(state)
             self._send(200, {"success": True})
             return
         if path == "/api/plugins/restart":
+            name = str(payload.get("pluginName"))
+            plugin = state.setdefault("plugins", {}).setdefault(name, {})
+            plugin["runtimeStatus"] = "running"
+            plugin["lastSyncAt"] = int(time.time())
+            save_state(state)
             self._send(200, {"success": True})
             return
         if path == "/api/plugins/uninstall":
             name = str(payload.get("pluginName"))
             state.get("plugins", {}).pop(name, None)
             save_state(state)
+            meta_path = os.path.join(CONFIGS_DIR, f"{name}.meta.json")
+            if os.path.exists(meta_path):
+                os.remove(meta_path)
             plugin_dir = os.path.join(PLUGINS_DIR, name)
             if os.path.isdir(plugin_dir):
                 for root, dirs, files in os.walk(plugin_dir, topdown=False):
@@ -251,6 +330,8 @@ export class RemoteAgentOnboardingService {
       'AGENT_VERSION="0.1.0-bootstrap"',
       'AGENT_PORT="${AGENT_PORT:-37122}"',
       'AGENT_ROOT="$HOME/.ztools-agent"',
+      'AGENT_LOG="$AGENT_ROOT/agent.log"',
+      'AGENT_PID_FILE="$AGENT_ROOT/agent.pid"',
       'echo "Installing ZTools Linux agent..."',
       'mkdir -p "$AGENT_ROOT"',
       'REMOTE_IP="$(hostname -I 2>/dev/null | awk \'{print $1}\')"',
@@ -267,13 +348,15 @@ export class RemoteAgentOnboardingService {
       `AGENT_TOKEN=${envFileQuote(record.onboardingToken)}`,
       `AGENT_REGISTER_URL=${envFileQuote(registerUrl)}`,
       'AGENT_VERSION="0.1.0-bootstrap"',
+      'AGENT_LOG="$HOME/.ztools-agent/agent.log"',
+      'AGENT_PID_FILE="$HOME/.ztools-agent/agent.pid"',
       'EOF',
-      "cat > \"$AGENT_ROOT/agent.py\" <<'PY'",
+      'cat > "$AGENT_ROOT/agent.py" <<\'PY\'',
       buildBootstrapAgentSource(),
       'PY',
-      'nohup "$PYTHON_BIN" "$AGENT_ROOT/agent.py" >/tmp/ztools-agent.log 2>&1 &',
+      'nohup "$PYTHON_BIN" "$AGENT_ROOT/agent.py" >>"$AGENT_LOG" 2>&1 &',
       'sleep 1',
-      'REGISTER_PAYLOAD="$($PYTHON_BIN - <<\'PY\'',
+      "REGISTER_PAYLOAD=\"$($PYTHON_BIN - <<'PY'",
       'import datetime',
       'import json',
       'import os',
@@ -331,6 +414,12 @@ export class RemoteAgentOnboardingService {
           typeof body.lastSeenAt === 'string' && body.lastSeenAt
             ? body.lastSeenAt
             : new Date().toISOString()
+        const agentPid =
+          typeof body.agentPid === 'number' && Number.isFinite(body.agentPid)
+            ? body.agentPid
+            : undefined
+        const agentLogPath =
+          typeof body.agentLogPath === 'string' && body.agentLogPath ? body.agentLogPath : undefined
 
         if (!token || !machineId || !agentBaseUrl || !agentVersion) {
           this.sendJson(res, 400, { success: false, error: 'invalid register payload' })
@@ -342,7 +431,9 @@ export class RemoteAgentOnboardingService {
           machineId,
           agentBaseUrl,
           agentVersion,
-          lastSeenAt
+          lastSeenAt,
+          agentPid,
+          agentLogPath
         })
         this.sendJson(res, result.success ? 200 : 400, result)
         return

@@ -13,8 +13,15 @@ export function createPendingRemoteAgent(
   input: RemoteAgentOnboardingInput
 ): RemoteAgentsDoc {
   const others = doc.items.filter((item) => item.id !== input.id)
-  const { id, name, platform, selectedLocalAddress, tagPolicy, onboardingToken, onboardingExpiresAt } =
-    input
+  const {
+    id,
+    name,
+    platform,
+    selectedLocalAddress,
+    tagPolicy,
+    onboardingToken,
+    onboardingExpiresAt
+  } = input
 
   return {
     items: [
@@ -31,7 +38,9 @@ export function createPendingRemoteAgent(
         agentBaseUrl: undefined,
         agentVersion: undefined,
         lastSeenAt: undefined,
-        lastError: undefined
+        lastError: undefined,
+        agentPid: undefined,
+        agentLogPath: undefined
       }
     ]
   }
@@ -41,7 +50,7 @@ export function markRemoteAgentOnline(
   doc: RemoteAgentsDoc,
   input: RemoteAgentOnlineUpdate
 ): RemoteAgentsDoc {
-  const { id, agentBaseUrl, agentVersion, lastSeenAt } = input
+  const { id, agentBaseUrl, agentVersion, lastSeenAt, agentPid, agentLogPath } = input
 
   if (!agentBaseUrl || !agentVersion || !lastSeenAt) {
     throw new Error('agentBaseUrl, agentVersion, and lastSeenAt are required')
@@ -59,7 +68,9 @@ export function markRemoteAgentOnline(
             agentBaseUrl,
             agentVersion,
             lastSeenAt,
-            lastError: undefined
+            lastError: undefined,
+            agentPid,
+            agentLogPath
           }
     )
   }

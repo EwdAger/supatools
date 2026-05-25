@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RemoteAgentOnboardingService } from '../../src/main/core/remoteAgent/onboardingService'
 import type { PendingRemoteAgentRecord } from '../../src/shared/remoteAgent'
 
-function makePendingRecord(overrides: Partial<PendingRemoteAgentRecord> = {}): PendingRemoteAgentRecord {
+function makePendingRecord(
+  overrides: Partial<PendingRemoteAgentRecord> = {}
+): PendingRemoteAgentRecord {
   return {
     id: 'agent-1',
     name: 'Workshop Linux',
@@ -76,6 +78,71 @@ describe('RemoteAgentOnboardingService', () => {
       agentBaseUrl: 'http://10.0.0.5:37122',
       agentVersion: '0.1.0-bootstrap',
       lastSeenAt: '2026-05-07T08:03:00.000Z'
+    })
+  })
+
+  it('serves install scripts that include runtime file locations', async () => {
+    const service = new RemoteAgentOnboardingService(0, {
+      findPendingRecordByToken: () => null,
+      registerRemoteAgent: vi.fn(async () => ({ success: true }))
+    })
+    runningServices.push(service)
+    await service.start()
+
+    const response = await fetch(`http://127.0.0.1:${service.getPort()}/agent/install/token-1.sh`)
+    expect(response.status).toBe(404)
+
+    const record = makePendingRecord()
+    const installService = new RemoteAgentOnboardingService(0, {
+      findPendingRecordByToken: (token) => (token === 'token-1' ? record : null),
+      registerRemoteAgent: vi.fn(async () => ({ success: true }))
+    })
+    runningServices.push(installService)
+    await installService.start()
+
+    const scriptResponse = await fetch(
+      `http://127.0.0.1:${installService.getPort()}/agent/install/${record.onboardingToken}.sh`
+    )
+    expect(scriptResponse.status).toBe(200)
+    const script = await scriptResponse.text()
+    expect(script).toContain('agent.log')
+    expect(script).toContain('agent.pid')
+  })
+
+  it('forwards optional pid and logPath in register requests', async () => {
+    const registerRemoteAgent = vi.fn(async () => ({ success: true }))
+    const service = new RemoteAgentOnboardingService(0, {
+      findPendingRecordByToken: (token) => (token === 'token-1' ? makePendingRecord() : null),
+      registerRemoteAgent
+    })
+    runningServices.push(service)
+    await service.start()
+
+    const response = await fetch(`http://127.0.0.1:${service.getPort()}/agent/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        token: 'token-1',
+        machineId: 'agent-1',
+        agentBaseUrl: 'http://10.0.0.5:37122',
+        agentVersion: '0.1.0-bootstrap',
+        lastSeenAt: '2026-05-07T08:03:00.000Z',
+        agentPid: 2222,
+        agentLogPath: '/home/demo/.ztools-agent/agent.log'
+      })
+    })
+
+    expect(response.status).toBe(200)
+    expect(registerRemoteAgent).toHaveBeenCalledWith({
+      token: 'token-1',
+      machineId: 'agent-1',
+      agentBaseUrl: 'http://10.0.0.5:37122',
+      agentVersion: '0.1.0-bootstrap',
+      lastSeenAt: '2026-05-07T08:03:00.000Z',
+      agentPid: 2222,
+      agentLogPath: '/home/demo/.ztools-agent/agent.log'
     })
   })
 })

@@ -113,6 +113,30 @@ describe('plugin preload internal api bridge', () => {
     expect(ipcInvoke).toHaveBeenCalledWith('internal:remote-agents-list')
   })
 
+  it('exposes getRemoteAgentInfo for internal plugin runtimes', async () => {
+    require(preloadPath)
+
+    const internalApi = (globalThis as any).window.ztools?.internal
+
+    expect(internalApi?.getRemoteAgentInfo).toBeTypeOf('function')
+
+    await internalApi.getRemoteAgentInfo('agent-1')
+
+    expect(ipcInvoke).toHaveBeenCalledWith('internal:remote-agent-info', 'agent-1')
+  })
+
+  it('exposes listRemoteAgentInstalledPlugins for internal plugin runtimes', async () => {
+    require(preloadPath)
+
+    const internalApi = (globalThis as any).window.ztools?.internal
+
+    expect(internalApi?.listRemoteAgentInstalledPlugins).toBeTypeOf('function')
+
+    await internalApi.listRemoteAgentInstalledPlugins('agent-1')
+
+    expect(ipcInvoke).toHaveBeenCalledWith('internal:remote-agent-installed-plugins', 'agent-1')
+  })
+
   it('exposes addPluginToRemoteWarehouse for internal plugin runtimes', async () => {
     require(preloadPath)
 

@@ -130,7 +130,9 @@ describe('remote agent store', () => {
       id: 'agent-1',
       agentBaseUrl: 'http://10.0.0.5:8123',
       agentVersion: '0.1.0',
-      lastSeenAt: '2026-05-07T08:03:00.000Z'
+      lastSeenAt: '2026-05-07T08:03:00.000Z',
+      agentPid: 24567,
+      agentLogPath: '/home/demo/.ztools-agent/agent.log'
     })
 
     expect(online.items[0]).toMatchObject({
@@ -138,7 +140,9 @@ describe('remote agent store', () => {
       status: 'online',
       agentBaseUrl: 'http://10.0.0.5:8123',
       agentVersion: '0.1.0',
-      lastSeenAt: '2026-05-07T08:03:00.000Z'
+      lastSeenAt: '2026-05-07T08:03:00.000Z',
+      agentPid: 24567,
+      agentLogPath: '/home/demo/.ztools-agent/agent.log'
     })
     expect(online.items[0].onboardingToken).toBeUndefined()
     expect(online.items[0].onboardingExpiresAt).toBeUndefined()
@@ -178,11 +182,14 @@ describe('remote agent store', () => {
     expect(script).toContain("AGENT_MACHINE_ID='agent-1'")
     expect(script).toContain("AGENT_TOKEN='token-1'")
     expect(script).toContain("AGENT_REGISTER_URL='http://192.168.1.23:8123/agent/register'")
+    expect(script).toContain('AGENT_LOG="$AGENT_ROOT/agent.log"')
+    expect(script).toContain('AGENT_PID_FILE="$AGENT_ROOT/agent.pid"')
     expect(script).toContain('cat > "$AGENT_ROOT/agent.py" <<\'PY\'')
     expect(script).toContain('curl -fsS -X POST "$AGENT_REGISTER_URL"')
     expect(script).toContain('AGENT_MACHINE_ID="agent-1"')
     expect(script).toContain('AGENT_TOKEN="token-1"')
     expect(script).toContain('AGENT_REGISTER_URL="http://192.168.1.23:8123/agent/register"')
+    expect(script).toContain('nohup "$PYTHON_BIN" "$AGENT_ROOT/agent.py" >>"$AGENT_LOG" 2>&1 &')
   })
 
   it('shell-escapes machine ids, tokens, and urls in the install script', () => {

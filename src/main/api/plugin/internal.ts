@@ -357,6 +357,20 @@ export class InternalPluginAPI {
       return await remoteAgentManager.listRemoteAgentSyncJobs(machineId)
     })
 
+    ipcMain.handle('internal:remote-agent-info', async (event, machineId: string) => {
+      if (!requireInternalPlugin(this.pluginManager, event)) {
+        throw new PermissionDeniedError('internal:remote-agent-info')
+      }
+      return await remoteAgentManager.getRemoteAgentInfo(machineId)
+    })
+
+    ipcMain.handle('internal:remote-agent-installed-plugins', async (event, machineId: string) => {
+      if (!requireInternalPlugin(this.pluginManager, event)) {
+        throw new PermissionDeniedError('internal:remote-agent-installed-plugins')
+      }
+      return await remoteAgentManager.listRemoteAgentInstalledPlugins(machineId)
+    })
+
     ipcMain.handle('internal:update-dev-projects-order', async (event, pluginNames: string[]) => {
       if (!requireInternalPlugin(this.pluginManager, event)) {
         throw new PermissionDeniedError('internal:update-dev-projects-order')

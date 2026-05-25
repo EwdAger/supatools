@@ -11,6 +11,8 @@ const agents = ref<any[]>([])
 const plugins = ref<any[]>([])
 const localAddresses = ref<string[]>([])
 const syncJobs = ref<any[]>([])
+const installedRemotePlugins = ref<any[]>([])
+const agentInfo = ref<any | null>(null)
 const selectedAgentId = ref('')
 const selectedPluginName = ref('')
 const installCommand = ref('')
@@ -114,6 +116,27 @@ async function loadSyncJobs(): Promise<void> {
   }
 }
 
+async function loadRemoteAgentStatus(): Promise<void> {
+  if (!selectedAgent.value) {
+    installedRemotePlugins.value = []
+    agentInfo.value = null
+    return
+  }
+
+  try {
+    const [info, installedPlugins] = await Promise.all([
+      window.ztools.internal.getRemoteAgentInfo(selectedAgent.value.id),
+      window.ztools.internal.listRemoteAgentInstalledPlugins(selectedAgent.value.id)
+    ])
+    agentInfo.value = info
+    installedRemotePlugins.value = installedPlugins
+  } catch (err) {
+    console.error('加载远端机器状态失败:', err)
+    installedRemotePlugins.value = []
+    agentInfo.value = null
+  }
+}
+
 async function createAgent(): Promise<void> {
   if (!createForm.value.name.trim()) {
     warning('请填写机器名称')
@@ -212,13 +235,13 @@ async function syncSelectedAgent(): Promise<void> {
     return
   }
 
-  await loadSyncJobs()
+  await Promise.all([loadSyncJobs(), loadRemoteAgentStatus()])
   success('远程 Agent 同步完成')
 }
 
 watch(selectedAgentId, async () => {
   updateInstallCommandForSelection()
-  await loadSyncJobs()
+  await Promise.all([loadSyncJobs(), loadRemoteAgentStatus()])
   selectedPluginName.value = availablePlugins.value[0]?.name || ''
 })
 
@@ -250,7 +273,12 @@ onMounted(() => {
               <span>机器名称</span>
               <span class="setting-desc">用于区分不同 Linux 远程机器</span>
             </label>
-            <input v-model="createForm.name" class="input" type="text" placeholder="Workshop Linux" />
+            <input
+              v-model="createForm.name"
+              class="input"
+              type="text"
+              placeholder="Workshop Linux"
+            />
           </div>
 
           <div class="setting-item vertical">
@@ -282,12 +310,7 @@ onMounted(() => {
               <span>允许标签</span>
               <span class="setting-desc">使用逗号分隔，例如 `scp,hci`</span>
             </label>
-            <input
-              v-model="createForm.tagInput"
-              class="input"
-              type="text"
-              placeholder="scp,hci"
-            />
+            <input v-model="createForm.tagInput" class="input" type="text" placeholder="scp,hci" />
           </div>
 
           <button class="btn btn-primary create-btn" @click="createAgent">生成安装命令</button>
@@ -305,9 +328,13 @@ onMounted(() => {
             >
               <div class="machine-top">
                 <span class="machine-name">{{ agent.name }}</span>
-                <span class="status-pill" :class="`status-${agent.status}`">{{ agent.status }}</span>
+                <span class="status-pill" :class="`status-${agent.status}`">{{
+                  agent.status
+                }}</span>
               </div>
-              <div class="machine-meta">{{ agent.platform }} · {{ agent.selectedLocalAddress }}</div>
+              <div class="machine-meta">
+                {{ agent.platform }} · {{ agent.selectedLocalAddress }}
+              </div>
             </button>
           </div>
         </div>
@@ -317,7 +344,11 @@ onMounted(() => {
         <template v-if="selectedAgent">
           <div class="status-bar">
             <span class="status-dot" :class="{ active: selectedAgent.status === 'online' }"></span>
-            <span class="status-text">{{ selectedAgentStatusText }}</span>
+            <span class="status-text">
+              {{ selectedAgentStatusText }}
+              <template v-if="agentInfo?.pid"> · PID {{ agentInfo.pid }}</template>
+              <template v-if="agentInfo?.agentVersion"> · v{{ agentInfo.agentVersion }}</template>
+            </span>
           </div>
 
           <div class="service-config">
@@ -350,7 +381,11 @@ onMounted(() => {
                   {{ row.name }}
                 </option>
               </select>
-              <textarea v-model="pluginConfigText" class="command-box config-box" rows="8"></textarea>
+              <textarea
+                v-model="pluginConfigText"
+                class="command-box config-box"
+                rows="8"
+              ></textarea>
               <div class="action-row">
                 <button class="btn btn-primary btn-sm" @click="savePluginConfig">保存配置</button>
                 <button class="btn btn-primary" @click="syncSelectedAgent">同步插件</button>
@@ -360,24 +395,24 @@ onMounted(() => {
 
           <div class="api-docs">
             <div class="panel-heading">
-              <h3 class="docs-title">可部署插件</h3>
-              <span class="panel-count">{{ deployableRows.length }}</span>
+              <h3 class="docs-title">远端已安装插件</h3>
+              <span class="panel-count">{{ installedRemotePlugins.length }}</span>
             </div>
-            <div class="plugin-list">
-              <div v-for="row in deployableRows" :key="row.name" class="plugin-item">
+            <div v-if="installedRemotePlugins.length === 0" class="empty-state">
+              暂无远端已安装插件
+            </div>
+            <div v-else class="plugin-list">
+              <div v-for="row in installedRemotePlugins" :key="row.name" class="plugin-item">
                 <div class="plugin-main">
                   <strong>{{ row.name }}</strong>
                   <span class="plugin-version">v{{ row.version }}</span>
                 </div>
-                <div class="plugin-tags">{{ (row.tags || []).join(', ') || '无标签' }}</div>
-                <div class="plugin-state" :class="{ excluded: row.excluded }">
-                  {{
-                    row.excluded
-                      ? row.excludedReason === 'platform'
-                        ? '平台不匹配'
-                        : '标签策略排除'
-                      : '可部署'
-                  }}
+                <div class="plugin-tags">
+                  {{ row.runtimeModel || 'unknown' }}
+                  <template v-if="row.configStatus"> · config: {{ row.configStatus }}</template>
+                </div>
+                <div class="plugin-state">
+                  {{ row.runtimeStatus || row.lastRunStatus || row.lastError || '已安装' }}
                 </div>
               </div>
             </div>

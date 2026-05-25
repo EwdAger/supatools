@@ -113,6 +113,15 @@ declare global {
           error?: string
         }>
         listRemoteAgentSyncJobs: (machineId: string) => Promise<any[]>
+        getRemoteAgentInfo: (machineId: string) => Promise<{
+          machineId: string
+          platform: 'linux'
+          agentVersion: string
+          status: 'online'
+          pid?: number
+          logPath?: string
+        } | null>
+        listRemoteAgentInstalledPlugins: (machineId: string) => Promise<any[]>
         // 导入开发中的插件工程，可选直接传入 plugin.json 路径
         importDevPlugin: (pluginJsonPath?: string) => Promise<{
           success: boolean

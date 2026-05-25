@@ -17,9 +17,11 @@ import { RemoteAgentClient } from './client'
 import { listLanIpv4Addresses } from './localAddressDiscovery'
 import { RemoteAgentOnboardingService } from './onboardingService'
 import type {
+  RemoteAgentInfo,
   PendingRemoteAgentRecord,
   RemoteAgentOnboardingInput,
   RemoteAgentPluginConfigRecord,
+  RemoteAgentPluginStatus,
   RemoteAgentRecord,
   RemoteAgentsDoc,
   RemoteAgentSyncJobRecord,
@@ -82,18 +84,26 @@ export class RemoteAgentManager {
   public async regenerateRemoteAgentInstallCommand(
     machineId: string,
     selectedLocalAddress: string
-  ): Promise<{ success: boolean; record?: PendingRemoteAgentRecord; installCommand?: string; error?: string }> {
+  ): Promise<{
+    success: boolean
+    record?: PendingRemoteAgentRecord
+    installCommand?: string
+    error?: string
+  }> {
     const existing = this.readAgentsDoc().items.find((item) => item.id === machineId)
     if (!existing) {
       return { success: false, error: 'Remote agent not found' }
     }
 
-    const onboardingInput = this.buildOnboardingInput({
-      name: existing.name,
-      platform: existing.platform,
-      selectedLocalAddress,
-      tagPolicy: existing.tagPolicy
-    }, machineId)
+    const onboardingInput = this.buildOnboardingInput(
+      {
+        name: existing.name,
+        platform: existing.platform,
+        selectedLocalAddress,
+        tagPolicy: existing.tagPolicy
+      },
+      machineId
+    )
 
     const nextDoc = createPendingRemoteAgent(this.readAgentsDoc(), onboardingInput)
     this.writeAgentsDoc(nextDoc)
@@ -129,6 +139,43 @@ export class RemoteAgentManager {
     return this.readSyncJobs().filter((item) => item.machineId === machineId)
   }
 
+  public async getRemoteAgentInfo(machineId: string): Promise<RemoteAgentInfo | null> {
+    const machine = this.requireMachine(machineId)
+    if (!machine.agentBaseUrl) return null
+
+    try {
+      return await new RemoteAgentClient(machine.agentBaseUrl).getInfo()
+    } catch (error) {
+      console.error('[RemoteAgent] 获取远端 agent 信息失败:', error)
+      return null
+    }
+  }
+
+  public async listRemoteAgentInstalledPlugins(
+    machineId: string
+  ): Promise<RemoteAgentPluginStatus[]> {
+    const machine = this.requireMachine(machineId)
+    if (!machine.agentBaseUrl) return []
+
+    try {
+      const client = new RemoteAgentClient(machine.agentBaseUrl)
+      const plugins = await client.listPlugins()
+      const savedConfigs = this.readPluginConfigs().filter((item) => item.machineId === machine.id)
+      return plugins.map((plugin) => {
+        const saved = savedConfigs.find((item) => item.pluginName === plugin.name)
+        return {
+          ...plugin,
+          configStatus:
+            plugin.configStatus ||
+            (plugin.runtimeModel === 'static' ? 'not_required' : saved ? 'saved' : 'missing')
+        }
+      })
+    } catch (error) {
+      console.error('[RemoteAgent] 获取远端插件状态失败:', error)
+      return []
+    }
+  }
+
   public async syncRemoteAgent(
     machineId: string
   ): Promise<{ success: boolean; summary?: unknown; error?: string }> {
@@ -154,6 +201,7 @@ export class RemoteAgentManager {
           client.installPlugin({
             name: plugin.name,
             version: plugin.version,
+            runtimeModel: plugin.runtimeModel,
             packageData: await this.packagePluginForRemote(plugin)
           })
         )
@@ -164,6 +212,7 @@ export class RemoteAgentManager {
           client.installPlugin({
             name: plugin.name,
             version: plugin.version,
+            runtimeModel: plugin.runtimeModel,
             packageData: await this.packagePluginForRemote(plugin)
           })
         )
@@ -253,15 +302,15 @@ export class RemoteAgentManager {
     return record as PendingRemoteAgentRecord
   }
 
-  private async registerRemoteAgent(
-    payload: {
-      token: string
-      machineId: string
-      agentBaseUrl: string
-      agentVersion: string
-      lastSeenAt: string
-    }
-  ): Promise<{ success: boolean; error?: string }> {
+  private async registerRemoteAgent(payload: {
+    token: string
+    machineId: string
+    agentBaseUrl: string
+    agentVersion: string
+    lastSeenAt: string
+    agentPid?: number
+    agentLogPath?: string
+  }): Promise<{ success: boolean; error?: string }> {
     const doc = this.readAgentsDoc()
     const record = doc.items.find((item) => item.id === payload.machineId)
     if (
@@ -278,7 +327,9 @@ export class RemoteAgentManager {
       id: payload.machineId,
       agentBaseUrl: payload.agentBaseUrl,
       agentVersion: payload.agentVersion,
-      lastSeenAt: payload.lastSeenAt
+      lastSeenAt: payload.lastSeenAt,
+      agentPid: typeof payload.agentPid === 'number' ? payload.agentPid : undefined,
+      agentLogPath: typeof payload.agentLogPath === 'string' ? payload.agentLogPath : undefined
     })
     this.writeAgentsDoc(nextDoc)
     await this.refreshOnboardingService()
@@ -295,7 +346,12 @@ export class RemoteAgentManager {
 
   private requirePendingRecord(doc: RemoteAgentsDoc, machineId: string): PendingRemoteAgentRecord {
     const record = doc.items.find((item) => item.id === machineId)
-    if (!record || record.status !== 'pending' || !record.onboardingToken || !record.onboardingExpiresAt) {
+    if (
+      !record ||
+      record.status !== 'pending' ||
+      !record.onboardingToken ||
+      !record.onboardingExpiresAt
+    ) {
       throw new Error('Pending remote agent record was not created correctly')
     }
     return record as PendingRemoteAgentRecord
