@@ -70,6 +70,8 @@ interface PluginMarketResponse {
   error?: string
 }
 
+type RemoteWarehouseState = 'unsupported' | 'not_added' | 'up_to_date' | 'update_available'
+
 const plugins = ref<Plugin[]>([])
 const pluginMap = ref<Map<string, Plugin>>(new Map())
 const storefrontSections = ref<StorefrontSection[]>([])
@@ -267,6 +269,27 @@ function canUpgrade(plugin: Plugin): boolean {
   return compareVersions(plugin.localVersion, plugin.version) < 0
 }
 
+function getWarehouseActionLabel(plugin: Plugin): string {
+  switch (plugin.remoteWarehouseState as RemoteWarehouseState | undefined) {
+    case 'up_to_date':
+      return '已在远程仓'
+    case 'update_available':
+      return '更新远程仓'
+    case 'not_added':
+      return '加入远程仓'
+    default:
+      return ''
+  }
+}
+
+function showWarehouseAction(plugin: Plugin): boolean {
+  return plugin.remoteDistributionSupported === true
+}
+
+function isWarehouseActionDisabled(plugin: Plugin): boolean {
+  return plugin.remoteWarehouseState === 'up_to_date' || installingPlugin.value === plugin.name
+}
+
 async function handleUpgradePlugin(plugin: Plugin): Promise<void> {
   if (installingPlugin.value) return
   if (!plugin.path) {
@@ -329,6 +352,35 @@ async function downloadPlugin(plugin: Plugin): Promise<void> {
   } catch (err: unknown) {
     console.error('安装出错:', err)
     error(`安装出错: ${err instanceof Error ? err.message : '未知错误'}`)
+  } finally {
+    installingPlugin.value = null
+  }
+}
+
+async function handleWarehouseAction(plugin: Plugin): Promise<void> {
+  if (!plugin.remoteDistributionSupported) return
+  if (installingPlugin.value) return
+  if (plugin.remoteWarehouseState === 'up_to_date') return
+
+  installingPlugin.value = plugin.name
+  try {
+    const result =
+      plugin.remoteWarehouseState === 'update_available'
+        ? await window.ztools.internal.updatePluginInRemoteWarehouse(plugin)
+        : await window.ztools.internal.addPluginToRemoteWarehouse(plugin)
+
+    if (!result.success) {
+      error(result.error || '远程插件仓操作失败')
+      return
+    }
+
+    success(
+      plugin.remoteWarehouseState === 'update_available' ? '远程仓快照已更新' : '已加入远程插件仓'
+    )
+    await fetchPlugins()
+  } catch (err: unknown) {
+    console.error('远程插件仓操作失败:', err)
+    error(`远程插件仓操作失败: ${err instanceof Error ? err.message : '未知错误'}`)
   } finally {
     installingPlugin.value = null
   }
@@ -456,10 +508,14 @@ onUnmounted(() => {
               :plugin="plugin"
               :installing-plugin="installingPlugin"
               :can-upgrade="canUpgrade(plugin)"
+              :warehouse-action-label="getWarehouseActionLabel(plugin)"
+              :show-warehouse-action="showWarehouseAction(plugin)"
+              :warehouse-action-disabled="isWarehouseActionDisabled(plugin)"
               @click="openPluginDetail(plugin)"
               @open="handleOpenPlugin(plugin)"
               @download="downloadPlugin(plugin)"
               @upgrade="handleUpgradePlugin(plugin)"
+              @warehouse="handleWarehouseAction(plugin)"
             />
           </div>
         </template>
@@ -520,10 +576,14 @@ onUnmounted(() => {
                     :plugin="plugin"
                     :installing-plugin="installingPlugin"
                     :can-upgrade="canUpgrade(plugin)"
+                    :warehouse-action-label="getWarehouseActionLabel(plugin)"
+                    :show-warehouse-action="showWarehouseAction(plugin)"
+                    :warehouse-action-disabled="isWarehouseActionDisabled(plugin)"
                     @click="openPluginDetail(plugin)"
                     @open="handleOpenPlugin(plugin)"
                     @download="downloadPlugin(plugin)"
                     @upgrade="handleUpgradePlugin(plugin)"
+                    @warehouse="handleWarehouseAction(plugin)"
                   />
                 </div>
               </div>
@@ -558,10 +618,14 @@ onUnmounted(() => {
               :plugin="plugin"
               :installing-plugin="installingPlugin"
               :can-upgrade="canUpgrade(plugin)"
+              :warehouse-action-label="getWarehouseActionLabel(plugin)"
+              :show-warehouse-action="showWarehouseAction(plugin)"
+              :warehouse-action-disabled="isWarehouseActionDisabled(plugin)"
               @click="openPluginDetail(plugin)"
               @open="handleOpenPlugin(plugin)"
               @download="downloadPlugin(plugin)"
               @upgrade="handleUpgradePlugin(plugin)"
+              @warehouse="handleWarehouseAction(plugin)"
             />
           </div>
         </template>
@@ -581,11 +645,15 @@ onUnmounted(() => {
           :installing-plugin="installingPlugin"
           :plugin-map="pluginMap"
           :can-upgrade="canUpgrade"
+          :warehouse-action-label="getWarehouseActionLabel"
+          :show-warehouse-action="showWarehouseAction"
+          :is-warehouse-action-disabled="isWarehouseActionDisabled"
           @back="closeCategoryDetail"
           @click-plugin="openPluginDetail"
           @open-plugin="handleOpenPlugin"
           @download-plugin="downloadPlugin"
           @upgrade-plugin="handleUpgradePlugin"
+          @warehouse-plugin="handleWarehouseAction"
         />
       </div>
     </Transition>

@@ -833,8 +833,7 @@ window.ztools = {
     selectPluginFile: async () => await electron.ipcRenderer.invoke('internal:select-plugin-file'),
     importPlugin: async () => await electron.ipcRenderer.invoke('internal:import-plugin'),
     getDevProjects: async () => await electron.ipcRenderer.invoke('internal:get-dev-projects'),
-    listRemoteAgents: async () =>
-      await electron.ipcRenderer.invoke('internal:remote-agents-list'),
+    listRemoteAgents: async () => await electron.ipcRenderer.invoke('internal:remote-agents-list'),
     listRemoteAgentLocalAddresses: async () =>
       await electron.ipcRenderer.invoke('internal:remote-agent-local-addresses'),
     createRemoteAgent: async (payload) =>
@@ -899,6 +898,10 @@ window.ztools = {
       await electron.ipcRenderer.invoke('internal:fetch-plugin-market'),
     installPluginFromMarket: async (plugin) =>
       await electron.ipcRenderer.invoke('internal:install-plugin-from-market', plugin),
+    addPluginToRemoteWarehouse: async (plugin) =>
+      await electron.ipcRenderer.invoke('internal:add-plugin-to-remote-warehouse', plugin),
+    updatePluginInRemoteWarehouse: async (plugin) =>
+      await electron.ipcRenderer.invoke('internal:update-plugin-in-remote-warehouse', plugin),
     installPluginFromNpm: async (options) =>
       await electron.ipcRenderer.invoke('internal:install-plugin-from-npm', options),
     getPluginReadme: async (pluginPathOrName, pluginName) =>

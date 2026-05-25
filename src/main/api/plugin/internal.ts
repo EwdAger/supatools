@@ -437,7 +437,7 @@ export class InternalPluginAPI {
       if (!requireInternalPlugin(this.pluginManager, event)) {
         throw new PermissionDeniedError('internal:fetch-plugin-market')
       }
-      return await pluginsAPI.market.fetchPluginMarket()
+      return await pluginsAPI.fetchPluginMarketWithWarehouseState()
     })
 
     ipcMain.handle('internal:install-plugin-from-market', async (event, plugin: any) => {
@@ -445,6 +445,20 @@ export class InternalPluginAPI {
         throw new PermissionDeniedError('internal:install-plugin-from-market')
       }
       return await pluginsAPI.installer.installPluginFromMarket(plugin)
+    })
+
+    ipcMain.handle('internal:add-plugin-to-remote-warehouse', async (event, plugin: any) => {
+      if (!requireInternalPlugin(this.pluginManager, event)) {
+        throw new PermissionDeniedError('internal:add-plugin-to-remote-warehouse')
+      }
+      return await pluginsAPI.addPluginToRemoteWarehouseFromMarket(plugin)
+    })
+
+    ipcMain.handle('internal:update-plugin-in-remote-warehouse', async (event, plugin: any) => {
+      if (!requireInternalPlugin(this.pluginManager, event)) {
+        throw new PermissionDeniedError('internal:update-plugin-in-remote-warehouse')
+      }
+      return await pluginsAPI.updatePluginInRemoteWarehouseFromMarket(plugin)
     })
 
     ipcMain.handle(

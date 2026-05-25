@@ -6,6 +6,9 @@ defineProps<{
   plugin: Plugin
   installingPlugin: string | null
   canUpgrade: boolean
+  warehouseActionLabel?: string
+  showWarehouseAction?: boolean
+  warehouseActionDisabled?: boolean
 }>()
 
 defineEmits<{
@@ -13,6 +16,7 @@ defineEmits<{
   (e: 'open'): void
   (e: 'download'): void
   (e: 'upgrade'): void
+  (e: 'warehouse'): void
 }>()
 </script>
 <template>
@@ -27,6 +31,14 @@ defineEmits<{
       </div>
     </div>
     <div class="plugin-action">
+      <button
+        v-if="showWarehouseAction"
+        class="btn btn-md btn-secondary warehouse-btn"
+        :disabled="warehouseActionDisabled"
+        @click.stop="$emit('warehouse')"
+      >
+        <span>{{ warehouseActionLabel }}</span>
+      </button>
       <template v-if="plugin.installed">
         <button
           v-if="canUpgrade"
@@ -151,6 +163,8 @@ defineEmits<{
 .plugin-action {
   flex-shrink: 0;
   margin-left: 10px;
+  display: flex;
+  align-items: center;
 }
 
 /* 图标按钮颜色样式 */
@@ -168,6 +182,10 @@ defineEmits<{
 
 .download-btn:hover:not(:disabled) {
   background: var(--primary-light-bg);
+}
+
+.warehouse-btn {
+  margin-right: 8px;
 }
 
 /* 按钮 loading 状态 */

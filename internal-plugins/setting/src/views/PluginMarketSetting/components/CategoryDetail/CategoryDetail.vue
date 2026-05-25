@@ -12,6 +12,9 @@ const props = defineProps<{
   installingPlugin: string | null
   pluginMap: Map<string, Plugin>
   canUpgrade: (plugin: Plugin) => boolean
+  warehouseActionLabel: (plugin: Plugin) => string
+  showWarehouseAction: (plugin: Plugin) => boolean
+  isWarehouseActionDisabled: (plugin: Plugin) => boolean
 }>()
 
 defineEmits<{
@@ -20,6 +23,7 @@ defineEmits<{
   (e: 'open-plugin', plugin: Plugin): void
   (e: 'download-plugin', plugin: Plugin): void
   (e: 'upgrade-plugin', plugin: Plugin): void
+  (e: 'warehouse-plugin', plugin: Plugin): void
 }>()
 
 function interpolateTemplate(template: string): string {
@@ -112,10 +116,14 @@ function shuffleSection(): void {
             :plugin="plugin"
             :installing-plugin="installingPlugin"
             :can-upgrade="canUpgrade(plugin)"
+            :warehouse-action-label="warehouseActionLabel(plugin)"
+            :show-warehouse-action="showWarehouseAction(plugin)"
+            :warehouse-action-disabled="isWarehouseActionDisabled(plugin)"
             @click="$emit('click-plugin', plugin)"
             @open="$emit('open-plugin', plugin)"
             @download="$emit('download-plugin', plugin)"
             @upgrade="$emit('upgrade-plugin', plugin)"
+            @warehouse="$emit('warehouse-plugin', plugin)"
           />
         </div>
       </div>

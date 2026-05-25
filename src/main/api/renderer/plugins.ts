@@ -25,6 +25,7 @@ import {
   createEmptyRemotePluginWarehouseDoc
 } from '../../../shared/remotePluginWarehouse'
 import { readRemotePluginWarehouse, upsertWarehouseEntry } from './remotePluginWarehouseRegistry'
+import { RemotePluginWarehouseAPI, type MarketWarehouseAwarePlugin } from './remotePluginWarehouse'
 
 // 插件目录
 const DISABLED_PLUGINS_KEY = 'disabled-plugins'
@@ -39,6 +40,7 @@ export class PluginsAPI {
   public devProjects!: PluginDevProjectsAPI
   public installer!: PluginInstallerAPI
   public market!: PluginMarketAPI
+  public remoteWarehouse!: RemotePluginWarehouseAPI
 
   public init(mainWindow: Electron.BrowserWindow, pluginManager: PluginManager): void {
     this.mainWindow = mainWindow
@@ -58,6 +60,10 @@ export class PluginsAPI {
       getRunningPlugins: () => this.getRunningPlugins()
     })
     this.market = new PluginMarketAPI()
+    this.remoteWarehouse = new RemotePluginWarehouseAPI(
+      (key) => databaseAPI.dbGet(key),
+      (key, value) => databaseAPI.dbPut(key, value)
+    )
     this.installer = new PluginInstallerAPI({
       get mainWindow() {
         return mainWindow
@@ -345,6 +351,28 @@ export class PluginsAPI {
     const nextDoc = upsertWarehouseEntry(current || createEmptyRemotePluginWarehouseDoc(), entry)
     this.writeRemotePluginWarehouse(nextDoc)
     return entry
+  }
+
+  public async fetchPluginMarketWithWarehouseState(): Promise<any> {
+    const result = await this.market.fetchPluginMarket()
+    if (!result.success || !Array.isArray(result.data)) return result
+
+    return {
+      ...result,
+      data: this.remoteWarehouse.enrichMarketPlugins(result.data as MarketWarehouseAwarePlugin[])
+    }
+  }
+
+  public async addPluginToRemoteWarehouseFromMarket(
+    plugin: MarketWarehouseAwarePlugin
+  ): Promise<any> {
+    return await this.remoteWarehouse.addFromMarket(plugin)
+  }
+
+  public async updatePluginInRemoteWarehouseFromMarket(
+    plugin: MarketWarehouseAwarePlugin
+  ): Promise<any> {
+    return await this.remoteWarehouse.updateFromMarket(plugin)
   }
 
   private writeInstalledPlugins(plugins: any[]): void {

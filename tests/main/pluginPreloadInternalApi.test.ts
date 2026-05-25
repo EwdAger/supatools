@@ -112,4 +112,37 @@ describe('plugin preload internal api bridge', () => {
 
     expect(ipcInvoke).toHaveBeenCalledWith('internal:remote-agents-list')
   })
+
+  it('exposes addPluginToRemoteWarehouse for internal plugin runtimes', async () => {
+    require(preloadPath)
+
+    const internalApi = (globalThis as any).window.ztools?.internal
+
+    expect(internalApi?.addPluginToRemoteWarehouse).toBeTypeOf('function')
+
+    await internalApi.addPluginToRemoteWarehouse({ name: 'remote-ocr-worker', version: '1.6.0' })
+
+    expect(ipcInvoke).toHaveBeenCalledWith('internal:add-plugin-to-remote-warehouse', {
+      name: 'remote-ocr-worker',
+      version: '1.6.0'
+    })
+  })
+
+  it('exposes updatePluginInRemoteWarehouse for internal plugin runtimes', async () => {
+    require(preloadPath)
+
+    const internalApi = (globalThis as any).window.ztools?.internal
+
+    expect(internalApi?.updatePluginInRemoteWarehouse).toBeTypeOf('function')
+
+    await internalApi.updatePluginInRemoteWarehouse({
+      name: 'remote-ocr-worker',
+      version: '1.7.0'
+    })
+
+    expect(ipcInvoke).toHaveBeenCalledWith('internal:update-plugin-in-remote-warehouse', {
+      name: 'remote-ocr-worker',
+      version: '1.7.0'
+    })
+  })
 })

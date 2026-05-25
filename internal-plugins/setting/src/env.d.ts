@@ -159,6 +159,18 @@ declare global {
           error?: string
           plugin?: any
         }>
+        addPluginToRemoteWarehouse: (plugin: any) => Promise<{
+          success: boolean
+          entry?: any
+          state?: 'unsupported' | 'not_added' | 'up_to_date' | 'update_available'
+          error?: string
+        }>
+        updatePluginInRemoteWarehouse: (plugin: any) => Promise<{
+          success: boolean
+          entry?: any
+          state?: 'unsupported' | 'not_added' | 'up_to_date' | 'update_available'
+          error?: string
+        }>
         installPluginFromNpm: (options: {
           packageName: string
           useChinaMirror?: boolean

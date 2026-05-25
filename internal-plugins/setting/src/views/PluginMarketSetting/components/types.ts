@@ -12,6 +12,9 @@ export interface Plugin {
   installed: boolean
   path?: string
   localVersion?: string
+  remoteDistributionSupported?: boolean
+  remoteWarehouseState?: 'unsupported' | 'not_added' | 'up_to_date' | 'update_available'
+  remoteWarehouseVersion?: string
 }
 
 export interface CategoryInfo {
