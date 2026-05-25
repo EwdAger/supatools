@@ -137,3 +137,37 @@ Implemented the wave 1 foundation for remote plugin sync by adding the shared me
 ### Next Steps
 
 - None - task complete
+
+## Session 5: Remote plugin sync waves 2 and 3
+
+**Date**: 2026-05-25
+**Task**: Remote plugin sync waves 2 and 3
+**Package**: ztools-plugin-cli
+**Branch**: `chore/finish-remote-plugin-sync-wrap-up`
+
+### Summary
+
+Completed wave 2 market-to-warehouse ingestion and snapshot update flow, then completed wave 3 Linux nohup agent runtime, machine installation status API, and machine-level configuration/state foundations.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash      | Message       |
+| --------- | ------------- |
+| `20ef105` | (see git log) |
+| `79d0592` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

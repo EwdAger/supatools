@@ -9,7 +9,7 @@
 <!-- @@@auto:current-status -->
 
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 4
+- **Total Sessions**: 5
 - **Last Active**: 2026-05-25
 <!-- @@@/auto:current-status -->
 
@@ -21,7 +21,7 @@
 
 | File           | Lines | Status |
 | -------------- | ----- | ------ |
-| `journal-1.md` | ~144  | Active |
+| `journal-1.md` | ~174  | Active |
 
 <!-- @@@/auto:active-documents -->
 
@@ -33,6 +33,7 @@
 
 | #   | Date       | Title                                     | Commits              | Branch                                    |
 | --- | ---------- | ----------------------------------------- | -------------------- | ----------------------------------------- |
+| 5   | 2026-05-25 | Remote plugin sync waves 2 and 3          | `20ef105`, `79d0592` | `chore/finish-remote-plugin-sync-wrap-up` |
 | 4   | 2026-05-25 | Remote plugin sync wave 1 foundation      | `72337df`, `42038da` | `chore/finish-remote-plugin-sync-wrap-up` |
 | 3   | 2026-05-22 | Bootstrap project guidelines              | `130feeb`            | `chore/finish-remote-plugin-sync-wrap-up` |
 | 2   | 2026-05-21 | Finish remote plugin sync wrap-up         | `1909b81`            | `chore/finish-remote-plugin-sync-wrap-up` |
