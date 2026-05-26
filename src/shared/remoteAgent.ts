@@ -10,6 +10,7 @@ export interface RemoteAgentRecord {
   id: string
   name: string
   platform: 'linux'
+  installProfileTag?: string
   tagPolicy: RemoteAgentTagPolicy
   status: RemoteAgentStatus
   selectedLocalAddress: string
@@ -31,6 +32,7 @@ export interface RemoteAgentOnboardingInput {
   id: string
   name: string
   platform: 'linux'
+  installProfileTag?: string
   selectedLocalAddress: string
   tagPolicy: RemoteAgentTagPolicy
   onboardingToken: string

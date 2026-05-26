@@ -46,6 +46,7 @@ describe('remote agent store', () => {
       id: 'agent-1',
       name: 'Workshop Linux',
       platform: 'linux',
+      installProfileTag: 'linux-default',
       selectedLocalAddress: '192.168.1.23',
       tagPolicy: { mode: 'allow_list', tags: ['scp', 'hci'] },
       onboardingToken: 'token-1',
@@ -55,6 +56,7 @@ describe('remote agent store', () => {
     expect(state.items[0]).toMatchObject({
       id: 'agent-1',
       status: 'pending',
+      installProfileTag: 'linux-default',
       selectedLocalAddress: '192.168.1.23',
       onboardingToken: 'token-1',
       onboardingExpiresAt: '2026-05-07T08:15:00.000Z'
@@ -120,6 +122,7 @@ describe('remote agent store', () => {
       id: 'agent-1',
       name: 'Workshop Linux',
       platform: 'linux',
+      installProfileTag: 'linux-default',
       selectedLocalAddress: '192.168.1.23',
       tagPolicy: { mode: 'allow_all' },
       onboardingToken: 'token-1',
@@ -170,6 +173,7 @@ describe('remote agent store', () => {
       id: 'agent-1',
       name: 'Workshop Linux',
       platform: 'linux',
+      installProfileTag: 'linux-default',
       selectedLocalAddress: '192.168.1.23',
       tagPolicy: { mode: 'allow_all' },
       onboardingToken: 'token-1',
@@ -184,12 +188,19 @@ describe('remote agent store', () => {
     expect(script).toContain("AGENT_REGISTER_URL='http://192.168.1.23:8123/agent/register'")
     expect(script).toContain('AGENT_LOG="$AGENT_ROOT/agent.log"')
     expect(script).toContain('AGENT_PID_FILE="$AGENT_ROOT/agent.pid"')
+    expect(script).toContain('AGENT_SERVICE_NAME="ztools-agent"')
     expect(script).toContain('cat > "$AGENT_ROOT/agent.py" <<\'PY\'')
+    expect(script).toContain('cat > "$AGENT_ROOT/start-agent.sh" <<\'SH\'')
+    expect(script).toContain('if command -v systemctl >/dev/null 2>&1; then')
+    expect(script).toContain('systemctl daemon-reload')
+    expect(script).toContain('systemctl enable --now "${AGENT_SERVICE_NAME}.service"')
     expect(script).toContain('curl -fsS -X POST "$AGENT_REGISTER_URL"')
     expect(script).toContain('AGENT_MACHINE_ID="agent-1"')
     expect(script).toContain('AGENT_TOKEN="token-1"')
     expect(script).toContain('AGENT_REGISTER_URL="http://192.168.1.23:8123/agent/register"')
-    expect(script).toContain('nohup "$PYTHON_BIN" "$AGENT_ROOT/agent.py" >>"$AGENT_LOG" 2>&1 &')
+    expect(script).toContain('nohup "$AGENT_ROOT/start-agent.sh" &')
+    expect(script).toContain('AGENT_INSTALL_PROFILE_TAG="linux-default"')
+    expect(script).toContain('[ztools-agent hook] linux-default: no extra system changes applied')
   })
 
   it('shell-escapes machine ids, tokens, and urls in the install script', () => {

@@ -20,6 +20,7 @@ const pluginConfigText = ref('{\n  \n}')
 
 const createForm = ref({
   name: '',
+  installProfileTag: '',
   selectedLocalAddress: '',
   tagMode: 'allow_all' as 'allow_all' | 'allow_list',
   tagInput: ''
@@ -151,6 +152,9 @@ async function createAgent(): Promise<void> {
   const result = await window.ztools.internal.createRemoteAgent({
     name: createForm.value.name.trim(),
     platform: 'linux',
+    ...(createForm.value.installProfileTag
+      ? { installProfileTag: createForm.value.installProfileTag }
+      : {}),
     selectedLocalAddress: createForm.value.selectedLocalAddress,
     tagPolicy: buildTagPolicy()
   })
@@ -161,6 +165,7 @@ async function createAgent(): Promise<void> {
   }
 
   createForm.value.name = ''
+  createForm.value.installProfileTag = ''
   createForm.value.tagInput = ''
   await loadPage()
   if (result.record?.id) {
@@ -291,6 +296,21 @@ onMounted(() => {
               <option v-for="address in localAddresses" :key="address" :value="address">
                 {{ address }}
               </option>
+            </select>
+          </div>
+
+          <div class="setting-item vertical">
+            <label class="setting-label">
+              <span>安装平台标签</span>
+              <span class="setting-desc"
+                >用于选择 agent 安装后置脚本模板，例如 `linux-default` 或
+                `linux-open-iptables`</span
+              >
+            </label>
+            <select v-model="createForm.installProfileTag" class="input">
+              <option value="">无后置脚本</option>
+              <option value="linux-default">linux-default</option>
+              <option value="linux-open-iptables">linux-open-iptables</option>
             </select>
           </div>
 

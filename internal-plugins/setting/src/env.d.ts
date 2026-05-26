@@ -85,6 +85,7 @@ declare global {
         createRemoteAgent: (payload: {
           name: string
           platform: 'linux'
+          installProfileTag?: string
           selectedLocalAddress: string
           tagPolicy: { mode: 'allow_all' } | { mode: 'allow_list'; tags: string[] }
         }) => Promise<{

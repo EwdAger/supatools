@@ -39,6 +39,7 @@ const ONBOARDING_TTL_MS = 15 * 60 * 1000
 type CreateRemoteAgentInput = {
   name: string
   platform: 'linux'
+  installProfileTag?: string
   selectedLocalAddress: string
   tagPolicy: RemoteAgentTagPolicy
 }
@@ -99,6 +100,7 @@ export class RemoteAgentManager {
       {
         name: existing.name,
         platform: existing.platform,
+        installProfileTag: existing.installProfileTag,
         selectedLocalAddress,
         tagPolicy: existing.tagPolicy
       },
@@ -267,6 +269,7 @@ export class RemoteAgentManager {
       id: machineId,
       name: input.name,
       platform: input.platform,
+      ...(input.installProfileTag ? { installProfileTag: input.installProfileTag } : {}),
       selectedLocalAddress: input.selectedLocalAddress,
       tagPolicy: input.tagPolicy,
       onboardingToken: randomBytes(16).toString('hex'),

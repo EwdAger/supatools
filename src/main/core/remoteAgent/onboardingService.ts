@@ -1,3 +1,5 @@
+import fsSync from 'fs'
+import path from 'path'
 import { createServer, IncomingMessage, Server, ServerResponse } from 'http'
 import type { PendingRemoteAgentRecord } from '../../../shared/remoteAgent'
 
@@ -26,6 +28,22 @@ function envFileQuote(value: string): string {
     .replace(/`/g, '\\`')
     .replace(/\n/g, '\\n')
     .replace(/\r/g, '\\r')}"`
+}
+
+const INSTALL_HOOKS_DIR = path.resolve(
+  __dirname,
+  '../../../../resources/remote-agent/install-hooks'
+)
+
+function readInstallHookTemplate(installProfileTag?: string): string | null {
+  if (!installProfileTag) return null
+
+  const templatePath = path.join(INSTALL_HOOKS_DIR, `${installProfileTag}.sh`)
+  if (!fsSync.existsSync(templatePath)) {
+    return null
+  }
+
+  return fsSync.readFileSync(templatePath, 'utf-8').trim()
 }
 
 function parseInstallToken(url: string): string | null {
@@ -310,6 +328,7 @@ export class RemoteAgentOnboardingService {
 
   public renderInstallScript(record: PendingRemoteAgentRecord): string {
     const registerUrl = `http://${record.selectedLocalAddress}:${this.activePort}/agent/register`
+    const installHookTemplate = readInstallHookTemplate(record.installProfileTag)
 
     return [
       '#!/bin/sh',
@@ -332,6 +351,7 @@ export class RemoteAgentOnboardingService {
       'AGENT_ROOT="$HOME/.ztools-agent"',
       'AGENT_LOG="$AGENT_ROOT/agent.log"',
       'AGENT_PID_FILE="$AGENT_ROOT/agent.pid"',
+      'AGENT_SERVICE_NAME="ztools-agent"',
       'echo "Installing ZTools Linux agent..."',
       'mkdir -p "$AGENT_ROOT"',
       'REMOTE_IP="$(hostname -I 2>/dev/null | awk \'{print $1}\')"',
@@ -350,21 +370,74 @@ export class RemoteAgentOnboardingService {
       'AGENT_VERSION="0.1.0-bootstrap"',
       'AGENT_LOG="$HOME/.ztools-agent/agent.log"',
       'AGENT_PID_FILE="$HOME/.ztools-agent/agent.pid"',
+      `AGENT_INSTALL_PROFILE_TAG=${envFileQuote(record.installProfileTag || '')}`,
       'EOF',
       'cat > "$AGENT_ROOT/agent.py" <<\'PY\'',
       buildBootstrapAgentSource(),
       'PY',
-      'nohup "$PYTHON_BIN" "$AGENT_ROOT/agent.py" >>"$AGENT_LOG" 2>&1 &',
+      'cat > "$AGENT_ROOT/start-agent.sh" <<\'SH\'',
+      '#!/bin/sh',
+      'exec "$PYTHON_BIN" "$AGENT_ROOT/agent.py" >>"$AGENT_LOG" 2>&1',
+      'SH',
+      'chmod +x "$AGENT_ROOT/start-agent.sh"',
+      ...(installHookTemplate
+        ? [
+            'cat > "$AGENT_ROOT/install-hook.sh" <<\'HOOK\'',
+            installHookTemplate,
+            'HOOK',
+            'chmod +x "$AGENT_ROOT/install-hook.sh"',
+            '"$AGENT_ROOT/install-hook.sh"'
+          ]
+        : []),
+      'if command -v systemctl >/dev/null 2>&1; then',
+      '  cat > "$AGENT_ROOT/${AGENT_SERVICE_NAME}.service" <<EOF',
+      '[Unit]',
+      'Description=ZTools Remote Agent',
+      'After=network.target',
+      '',
+      '[Service]',
+      'Type=simple',
+      'WorkingDirectory=$AGENT_ROOT',
+      'EnvironmentFile=$AGENT_ROOT/config.env',
+      'ExecStart=$AGENT_ROOT/start-agent.sh',
+      'Restart=always',
+      '',
+      '[Install]',
+      'WantedBy=multi-user.target',
+      'EOF',
+      '  if [ "$(id -u)" -eq 0 ]; then',
+      '    install -m 0644 "$AGENT_ROOT/${AGENT_SERVICE_NAME}.service" "/etc/systemd/system/${AGENT_SERVICE_NAME}.service"',
+      '    systemctl daemon-reload',
+      '    systemctl enable --now "${AGENT_SERVICE_NAME}.service"',
+      '  else',
+      '    mkdir -p "$HOME/.config/systemd/user"',
+      '    install -m 0644 "$AGENT_ROOT/${AGENT_SERVICE_NAME}.service" "$HOME/.config/systemd/user/${AGENT_SERVICE_NAME}.service"',
+      '    systemctl --user daemon-reload',
+      '    systemctl --user enable --now "${AGENT_SERVICE_NAME}.service"',
+      '  fi',
+      'else',
+      '  nohup "$AGENT_ROOT/start-agent.sh" &',
+      'fi',
       'sleep 1',
       "REGISTER_PAYLOAD=\"$($PYTHON_BIN - <<'PY'",
       'import datetime',
       'import json',
       'import os',
+      'pid = None',
+      'pid_file = os.environ.get("AGENT_PID_FILE")',
+      'if pid_file and os.path.exists(pid_file):',
+      '    try:',
+      '        with open(pid_file, "r", encoding="utf-8") as fh:',
+      '            pid = int(fh.read().strip())',
+      '    except Exception:',
+      '        pid = None',
       'print(json.dumps({',
       '    "token": os.environ["AGENT_TOKEN"],',
       '    "machineId": os.environ["AGENT_MACHINE_ID"],',
       '    "agentBaseUrl": os.environ["AGENT_BASE_URL"],',
       '    "agentVersion": os.environ["AGENT_VERSION"],',
+      '    "agentPid": pid,',
+      '    "agentLogPath": os.environ.get("AGENT_LOG"),',
       '    "lastSeenAt": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"',
       '}))',
       'PY',
