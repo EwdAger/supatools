@@ -179,6 +179,17 @@ const homeRoutes: MenuRouterItemType[] = [
     }
   },
   {
+    path: '/remoteWarehouse',
+    name: 'RemoteWarehouse',
+    component: () => import('@/views/RemoteWarehouseSetting/RemoteWarehouseSetting.vue'),
+    meta: {
+      menu: {
+        label: '远程插件仓',
+        icon: 'i-z-store'
+      }
+    }
+  },
+  {
     path: '/about',
     name: 'About',
     component: () => import('@/views/AboutSetting/AboutSetting.vue'),

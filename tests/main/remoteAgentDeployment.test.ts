@@ -70,6 +70,23 @@ describe('remoteAgent deployment', () => {
     expect(plan.uninstall.map((plugin) => plugin.name)).toEqual(['legacy-tool'])
   })
 
+  it('does not schedule uninstall when batch sync disables it', () => {
+    const plan = buildRemoteAgentSyncPlan(
+      [
+        {
+          name: 'scp-tool',
+          version: '1.0.0',
+          remoteSync: true
+        }
+      ],
+      [{ name: 'legacy-tool', version: '0.1.0' }],
+      { uninstallExtraneous: false }
+    )
+
+    expect(plan.install.map((plugin) => plugin.name)).toEqual(['scp-tool'])
+    expect(plan.uninstall).toEqual([])
+  })
+
   it('explains why a plugin cannot be distributed to a machine', () => {
     expect(
       getRemoteDistributionEligibility(

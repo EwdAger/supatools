@@ -108,7 +108,10 @@ declare global {
           pluginName: string
           config: Record<string, unknown>
         }) => Promise<{ success: boolean; error?: string }>
-        syncRemoteAgent: (machineId: string) => Promise<{
+        syncRemoteAgent: (
+          machineId: string,
+          pluginNames?: string[]
+        ) => Promise<{
           success: boolean
           summary?: any
           error?: string
@@ -123,6 +126,18 @@ declare global {
           logPath?: string
         } | null>
         listRemoteAgentInstalledPlugins: (machineId: string) => Promise<any[]>
+        getRemotePluginWarehouseView: (payload?: { machineId?: string }) => Promise<{
+          scope: 'overview' | 'machine'
+          machineId?: string
+          items: any[]
+          summary: {
+            totalEntries: number
+            updateAvailableEntries: number
+            eligibleEntries?: number
+            ineligibleEntries?: number
+            pendingSyncEntries?: number
+          }
+        }>
         // 导入开发中的插件工程，可选直接传入 plugin.json 路径
         importDevPlugin: (pluginJsonPath?: string) => Promise<{
           success: boolean

@@ -343,11 +343,21 @@ export class InternalPluginAPI {
       return await remoteAgentManager.saveRemoteAgentPluginConfig(payload)
     })
 
-    ipcMain.handle('internal:remote-agent-sync', async (event, machineId: string) => {
-      if (!requireInternalPlugin(this.pluginManager, event)) {
-        throw new PermissionDeniedError('internal:remote-agent-sync')
+    ipcMain.handle(
+      'internal:remote-agent-sync',
+      async (event, machineId: string, pluginNames?: string[]) => {
+        if (!requireInternalPlugin(this.pluginManager, event)) {
+          throw new PermissionDeniedError('internal:remote-agent-sync')
+        }
+        return await remoteAgentManager.syncRemoteAgent(machineId, pluginNames)
       }
-      return await remoteAgentManager.syncRemoteAgent(machineId)
+    )
+
+    ipcMain.handle('internal:remote-plugin-warehouse-view', async (event, payload?: any) => {
+      if (!requireInternalPlugin(this.pluginManager, event)) {
+        throw new PermissionDeniedError('internal:remote-plugin-warehouse-view')
+      }
+      return await remoteAgentManager.getRemotePluginWarehouseView(payload)
     })
 
     ipcMain.handle('internal:remote-agent-sync-jobs', async (event, machineId: string) => {

@@ -4,6 +4,7 @@ import type {
   PluginRemoteMetadata,
   PluginRuntimeModel
 } from './pluginMetadata'
+import type { RemoteAgentPluginStatus, RemoteDistributionIneligibilityReason } from './remoteAgent'
 
 export const REMOTE_PLUGIN_WAREHOUSE_DB_KEY = 'settings-remote-plugin-warehouse'
 
@@ -34,6 +35,44 @@ export interface RemotePluginWarehouseEntry {
 
 export interface RemotePluginWarehouseDoc {
   items: RemotePluginWarehouseEntry[]
+}
+
+export type RemotePluginWarehouseSyncAction = 'install' | 'upgrade' | 'configure'
+
+export interface RemotePluginWarehouseOverviewItem {
+  pluginName: string
+  title: string
+  version: string
+  sourceType: RemotePluginSourceType
+  snapshotCreatedAt: string
+  platform: string[]
+  tags: string[]
+  runtimeModel?: PluginRuntimeModel
+  hasMarketUpdate?: boolean
+  latestMarketVersion?: string
+}
+
+export interface RemotePluginWarehouseMachineItem extends RemotePluginWarehouseOverviewItem {
+  eligible: boolean
+  ineligibilityReason?: RemoteDistributionIneligibilityReason
+  remoteStatus?: RemoteAgentPluginStatus
+  hasSavedConfig: boolean
+  pendingActions: RemotePluginWarehouseSyncAction[]
+}
+
+export interface RemotePluginWarehouseSummary {
+  totalEntries: number
+  updateAvailableEntries: number
+  eligibleEntries?: number
+  ineligibleEntries?: number
+  pendingSyncEntries?: number
+}
+
+export interface RemotePluginWarehouseView {
+  scope: 'overview' | 'machine'
+  machineId?: string
+  items: Array<RemotePluginWarehouseOverviewItem | RemotePluginWarehouseMachineItem>
+  summary: RemotePluginWarehouseSummary
 }
 
 export function createEmptyRemotePluginWarehouseDoc(): RemotePluginWarehouseDoc {

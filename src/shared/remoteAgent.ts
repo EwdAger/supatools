@@ -6,6 +6,13 @@ export type RemoteAgentStatus = 'pending' | 'onboarding' | 'online' | 'offline' 
 
 export type RemoteAgentTagPolicy = { mode: 'allow_all' } | { mode: 'allow_list'; tags: string[] }
 
+export type RemoteDistributionIneligibilityReason =
+  | 'remote_sync_disabled'
+  | 'missing_runtime_model'
+  | 'missing_remote_entry'
+  | 'platform_mismatch'
+  | 'tag_policy_mismatch'
+
 export interface RemoteAgentRecord {
   id: string
   name: string

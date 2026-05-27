@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { DetailPanel, useToast } from '@/components'
 import { buildDeployablePluginRows } from './remoteAgentUtils'
 
 const { success, error, warning } = useToast()
+const route = useRoute()
+const router = useRouter()
 
 type TagPolicy = { mode: 'allow_all' } | { mode: 'allow_list'; tags: string[] }
 
@@ -259,17 +262,18 @@ async function savePluginConfig(): Promise<void> {
   success('运行前配置已保存')
 }
 
-async function syncSelectedAgent(): Promise<void> {
-  if (!selectedAgent.value) return
-
-  const result = await window.ztools.internal.syncRemoteAgent(selectedAgent.value.id)
-  if (!result.success) {
-    error(result.error || '远程 Agent 同步失败')
+async function openRemoteWarehouse(): Promise<void> {
+  if (!selectedAgent.value) {
+    warning('请先选择远程机器')
     return
   }
 
-  await Promise.all([loadSyncJobs(), loadRemoteAgentStatus()])
-  success('远程 Agent 同步完成')
+  await router.replace({
+    name: 'RemoteWarehouse',
+    query: {
+      machineId: selectedAgent.value.id
+    }
+  })
 }
 
 watch(selectedAgentId, async () => {
@@ -291,6 +295,16 @@ watch(
 onMounted(() => {
   void loadPage()
 })
+
+watch(
+  () => route.query.machineId,
+  (machineId) => {
+    if (typeof machineId === 'string' && machineId) {
+      selectedAgentId.value = machineId
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
@@ -492,7 +506,7 @@ onMounted(() => {
               ></textarea>
               <div class="action-row">
                 <button class="btn btn-primary" @click="savePluginConfig">保存配置</button>
-                <button class="btn btn-primary" @click="syncSelectedAgent">同步插件</button>
+                <button class="btn" @click="openRemoteWarehouse">打开远程插件仓</button>
               </div>
             </div>
           </div>

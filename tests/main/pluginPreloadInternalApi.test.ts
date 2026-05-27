@@ -125,6 +125,21 @@ describe('plugin preload internal api bridge', () => {
     expect(ipcInvoke).toHaveBeenCalledWith('internal:remote-agent-info', 'agent-1')
   })
 
+  it('passes selected plugin names when syncing a remote agent', async () => {
+    require(preloadPath)
+
+    const internalApi = (globalThis as any).window.ztools?.internal
+
+    expect(internalApi?.syncRemoteAgent).toBeTypeOf('function')
+
+    await internalApi.syncRemoteAgent('agent-1', ['scp-tool', 'mysql-helper'])
+
+    expect(ipcInvoke).toHaveBeenCalledWith('internal:remote-agent-sync', 'agent-1', [
+      'scp-tool',
+      'mysql-helper'
+    ])
+  })
+
   it('exposes listRemoteAgentInstalledPlugins for internal plugin runtimes', async () => {
     require(preloadPath)
 
@@ -135,6 +150,20 @@ describe('plugin preload internal api bridge', () => {
     await internalApi.listRemoteAgentInstalledPlugins('agent-1')
 
     expect(ipcInvoke).toHaveBeenCalledWith('internal:remote-agent-installed-plugins', 'agent-1')
+  })
+
+  it('exposes getRemotePluginWarehouseView for internal plugin runtimes', async () => {
+    require(preloadPath)
+
+    const internalApi = (globalThis as any).window.ztools?.internal
+
+    expect(internalApi?.getRemotePluginWarehouseView).toBeTypeOf('function')
+
+    await internalApi.getRemotePluginWarehouseView({ machineId: 'agent-1' })
+
+    expect(ipcInvoke).toHaveBeenCalledWith('internal:remote-plugin-warehouse-view', {
+      machineId: 'agent-1'
+    })
   })
 
   it('exposes addPluginToRemoteWarehouse for internal plugin runtimes', async () => {

@@ -1,4 +1,7 @@
-import type { RemoteAgentTagPolicy } from '../../../shared/remoteAgent'
+import type {
+  RemoteAgentTagPolicy,
+  RemoteDistributionIneligibilityReason
+} from '../../../shared/remoteAgent'
 import {
   supportsRemoteDistribution,
   type PluginRemoteMetadata,
@@ -25,13 +28,6 @@ function matchesTagPolicy(tags: string[], policy: RemoteAgentTagPolicy): boolean
   if (policy.mode === 'allow_all') return true
   return tags.some((tag) => policy.tags.includes(tag))
 }
-
-export type RemoteDistributionIneligibilityReason =
-  | 'remote_sync_disabled'
-  | 'missing_runtime_model'
-  | 'missing_remote_entry'
-  | 'platform_mismatch'
-  | 'tag_policy_mismatch'
 
 export function getRemoteDistributionEligibility(
   plugin: DeployablePlugin,
@@ -77,13 +73,13 @@ export function buildDeployablePluginList(
   return plugins.filter((plugin) => getRemoteDistributionEligibility(plugin, machine).eligible)
 }
 
-export function buildRemoteAgentSyncPlan(
-  localPlugins: DeployablePlugin[],
+export function buildRemoteAgentSyncPlan<T extends { name: string; version: string }>(
+  localPlugins: T[],
   remotePlugins: RemotePluginSnapshot[],
   options: { uninstallExtraneous: boolean }
 ): {
-  install: DeployablePlugin[]
-  upgrade: DeployablePlugin[]
+  install: T[]
+  upgrade: T[]
   uninstall: RemotePluginSnapshot[]
 } {
   const remoteByName = new Map(remotePlugins.map((plugin) => [plugin.name, plugin]))

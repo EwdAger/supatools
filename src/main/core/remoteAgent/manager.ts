@@ -1,21 +1,21 @@
 import { randomBytes, randomUUID } from 'crypto'
 import { promises as fs } from 'fs'
-import os from 'os'
-import path from 'path'
 import databaseAPI from '../../api/shared/database'
+import { readRemotePluginWarehouse } from '../../api/renderer/remotePluginWarehouseRegistry'
 import {
   createEmptyRemoteAgentsDoc,
   createPendingRemoteAgent,
   markRemoteAgentOnline
 } from './store'
-import {
-  type DeployablePlugin,
-  buildDeployablePluginList,
-  buildRemoteAgentSyncPlan
-} from './deployment'
+import { buildRemoteAgentSyncPlan } from './deployment'
 import { RemoteAgentClient } from './client'
 import { listLanIpv4Addresses } from './localAddressDiscovery'
 import { RemoteAgentOnboardingService } from './onboardingService'
+import {
+  buildRemotePluginWarehouseMachineItems,
+  buildRemotePluginWarehouseOverview,
+  buildRemotePluginWarehouseSummary
+} from './warehouseView'
 import type {
   RemoteAgentInfo,
   PendingRemoteAgentRecord,
@@ -32,6 +32,13 @@ import {
   REMOTE_AGENT_PLUGIN_CONFIGS_DB_KEY,
   REMOTE_AGENT_SYNC_JOBS_DB_KEY
 } from '../../../shared/remoteAgent'
+import {
+  REMOTE_PLUGIN_WAREHOUSE_DB_KEY,
+  type RemotePluginWarehouseDoc,
+  type RemotePluginWarehouseEntry,
+  type RemotePluginWarehouseMachineItem,
+  type RemotePluginWarehouseView
+} from '../../../shared/remotePluginWarehouse'
 
 const DEFAULT_ONBOARDING_PORT = 37121
 const ONBOARDING_TTL_MS = 15 * 60 * 1000
@@ -178,8 +185,41 @@ export class RemoteAgentManager {
     }
   }
 
+  public async getRemotePluginWarehouseView(input?: {
+    machineId?: string
+  }): Promise<RemotePluginWarehouseView> {
+    const warehouse = this.readWarehouseDoc()
+
+    if (!input?.machineId) {
+      const items = buildRemotePluginWarehouseOverview(warehouse)
+      return {
+        scope: 'overview',
+        items,
+        summary: buildRemotePluginWarehouseSummary(items)
+      }
+    }
+
+    const machine = this.requireMachine(input.machineId)
+    const remotePlugins = await this.listRemoteAgentInstalledPlugins(machine.id)
+    const savedConfigs = this.readPluginConfigs().filter((item) => item.machineId === machine.id)
+    const items = buildRemotePluginWarehouseMachineItems({
+      warehouse,
+      machine,
+      remotePlugins,
+      savedConfigs
+    })
+
+    return {
+      scope: 'machine',
+      machineId: machine.id,
+      items,
+      summary: buildRemotePluginWarehouseSummary(items)
+    }
+  }
+
   public async syncRemoteAgent(
-    machineId: string
+    machineId: string,
+    pluginNames?: string[]
   ): Promise<{ success: boolean; summary?: unknown; error?: string }> {
     try {
       const machine = this.requireMachine(machineId)
@@ -188,15 +228,28 @@ export class RemoteAgentManager {
       }
 
       const client = new RemoteAgentClient(machine.agentBaseUrl)
-      const deployable = buildDeployablePluginList(this.readInstalledPlugins(), {
-        platform: machine.platform,
-        tagPolicy: machine.tagPolicy
-      })
       const remotePlugins = await client.listPlugins()
       const pluginConfigs = this.readPluginConfigs().filter((item) => item.machineId === machine.id)
-      const plan = buildRemoteAgentSyncPlan(deployable, remotePlugins, {
-        uninstallExtraneous: true
+      const warehouseRows = buildRemotePluginWarehouseMachineItems({
+        warehouse: this.readWarehouseDoc(),
+        machine,
+        remotePlugins,
+        savedConfigs: pluginConfigs
       })
+      const selectedRows = this.selectSyncRows(warehouseRows, pluginNames)
+      const syncCandidates = selectedRows.map((row) => this.requireWarehouseEntry(row.pluginName))
+      const plan = buildRemoteAgentSyncPlan(
+        syncCandidates.map((entry) => ({
+          name: entry.pluginName,
+          version: entry.version,
+          runtimeModel: entry.runtimeModel,
+          packagePath: entry.packageRef.path
+        })),
+        remotePlugins,
+        {
+          uninstallExtraneous: false
+        }
+      )
 
       for (const plugin of plan.install) {
         await this.runSyncAction(machine.id, plugin.name, 'install', async () =>
@@ -204,7 +257,7 @@ export class RemoteAgentManager {
             name: plugin.name,
             version: plugin.version,
             runtimeModel: plugin.runtimeModel,
-            packageData: await this.packagePluginForRemote(plugin)
+            packageData: await this.packageWarehousePluginForRemote(plugin.packagePath)
           })
         )
       }
@@ -215,33 +268,35 @@ export class RemoteAgentManager {
             name: plugin.name,
             version: plugin.version,
             runtimeModel: plugin.runtimeModel,
-            packageData: await this.packagePluginForRemote(plugin)
+            packageData: await this.packageWarehousePluginForRemote(plugin.packagePath)
           })
         )
       }
 
-      for (const plugin of deployable) {
-        const savedConfig = pluginConfigs.find((item) => item.pluginName === plugin.name)
+      for (const plugin of selectedRows) {
+        if (!plugin.pendingActions.includes('configure')) continue
+
+        const savedConfig = pluginConfigs.find((item) => item.pluginName === plugin.pluginName)
         if (!savedConfig) continue
 
-        await this.runSyncAction(machine.id, plugin.name, 'configure', () =>
+        await this.runSyncAction(machine.id, plugin.pluginName, 'configure', () =>
           client.configurePlugin({
-            pluginName: plugin.name,
+            pluginName: plugin.pluginName,
             config: savedConfig.config
           })
         )
-        await this.runSyncAction(machine.id, plugin.name, 'restart', () =>
-          client.restartPlugin({ pluginName: plugin.name })
-        )
       }
 
-      for (const plugin of plan.uninstall) {
-        await this.runSyncAction(machine.id, plugin.name, 'uninstall', () =>
-          client.uninstallPlugin({ pluginName: plugin.name })
-        )
+      return {
+        success: true,
+        summary: {
+          install: plan.install.map((item) => item.name),
+          upgrade: plan.upgrade.map((item) => item.name),
+          configure: selectedRows
+            .filter((item) => item.pendingActions.includes('configure'))
+            .map((item) => item.pluginName)
+        }
       }
-
-      return { success: true, summary: plan }
     } catch (error) {
       return {
         success: false,
@@ -365,18 +420,8 @@ export class RemoteAgentManager {
     return Array.isArray(doc) ? (doc as RemoteAgentPluginConfigRecord[]) : []
   }
 
-  private readInstalledPlugins(): DeployablePlugin[] {
-    const doc = databaseAPI.dbGet('plugins')
-    if (!Array.isArray(doc)) return []
-
-    return doc.filter(
-      (item): item is DeployablePlugin =>
-        !!item &&
-        typeof item === 'object' &&
-        typeof (item as DeployablePlugin).name === 'string' &&
-        typeof (item as DeployablePlugin).version === 'string' &&
-        typeof (item as { path?: string }).path === 'string'
-    )
+  private readWarehouseDoc(): RemotePluginWarehouseDoc {
+    return readRemotePluginWarehouse(databaseAPI.dbGet(REMOTE_PLUGIN_WAREHOUSE_DB_KEY))
   }
 
   private readSyncJobs(): RemoteAgentSyncJobRecord[] {
@@ -445,23 +490,34 @@ export class RemoteAgentManager {
     }
   }
 
-  private async packagePluginForRemote(plugin: DeployablePlugin): Promise<string> {
-    const pluginPath = (plugin as { path?: string }).path
-    if (!pluginPath) {
-      throw new Error(`plugin ${plugin.name} has no local path`)
+  private selectSyncRows(
+    rows: RemotePluginWarehouseMachineItem[],
+    pluginNames?: string[]
+  ): RemotePluginWarehouseMachineItem[] {
+    const eligibleRows = rows.filter((row) => row.eligible)
+    if (!pluginNames || pluginNames.length === 0) {
+      return eligibleRows
     }
 
-    const { packZpx } = await import('../../utils/zpxArchive.js')
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ztools-remote-agent-'))
-    const archivePath = path.join(tempDir, `${plugin.name}.zpx`)
-
-    try {
-      await packZpx(pluginPath, archivePath)
-      const buffer = await fs.readFile(archivePath)
-      return buffer.toString('base64')
-    } finally {
-      await fs.rm(tempDir, { recursive: true, force: true })
+    const selected = eligibleRows.filter((row) => pluginNames.includes(row.pluginName))
+    if (selected.length === 0) {
+      throw new Error('No eligible remote warehouse entries selected')
     }
+
+    return selected
+  }
+
+  private requireWarehouseEntry(pluginName: string): RemotePluginWarehouseEntry {
+    const entry = this.readWarehouseDoc().items.find((item) => item.pluginName === pluginName)
+    if (!entry) {
+      throw new Error(`Remote warehouse entry ${pluginName} not found`)
+    }
+    return entry
+  }
+
+  private async packageWarehousePluginForRemote(packagePath: string): Promise<string> {
+    const buffer = await fs.readFile(packagePath)
+    return buffer.toString('base64')
   }
 }
 
