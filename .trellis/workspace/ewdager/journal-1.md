@@ -171,3 +171,39 @@ Completed wave 2 market-to-warehouse ingestion and snapshot update flow, then co
 ### Next Steps
 
 - None - task complete
+
+## Session 6: Finish remote plugin sync wave5 and bootstrap trellis
+
+**Date**: 2026-05-27
+**Task**: Finish remote plugin sync wave5 and bootstrap trellis
+**Package**: ztools-plugin-cli
+**Branch**: `chore/finish-remote-plugin-sync-wrap-up`
+
+### Summary
+
+Completed the remote warehouse page and single-machine batch sync flow, then checked in the Trellis workflow bootstrap, platform integrations, and the wave5 task record before archiving the related remote sync tasks.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash      | Message       |
+| --------- | ------------- |
+| `56002ea` | (see git log) |
+| `8ada9a4` | (see git log) |
+| `efd18d1` | (see git log) |
+| `0b93c6d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
