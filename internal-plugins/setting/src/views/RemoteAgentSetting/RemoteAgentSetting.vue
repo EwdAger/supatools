@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useToast } from '@/components'
+import { DetailPanel, useToast } from '@/components'
 import { buildDeployablePluginRows } from './remoteAgentUtils'
 
 const { success, error, warning } = useToast()
@@ -17,6 +17,7 @@ const selectedAgentId = ref('')
 const selectedPluginName = ref('')
 const installCommand = ref('')
 const pluginConfigText = ref('{\n  \n}')
+const showCreatePanel = ref(false)
 
 const createForm = ref({
   name: '',
@@ -29,6 +30,8 @@ const createForm = ref({
 const selectedAgent = computed(() => {
   return agents.value.find((agent) => agent.id === selectedAgentId.value) || null
 })
+
+const hasDetailPanel = computed(() => !!selectedAgent.value)
 
 const selectedAgentStatusText = computed(() => {
   if (!selectedAgent.value) return '未选择远程机器'
@@ -49,6 +52,14 @@ const deployableRows = computed(() => {
 
 const availablePlugins = computed(() => deployableRows.value.filter((row) => !row.excluded))
 
+const machineSummary = computed(() => {
+  return {
+    online: agents.value.filter((agent) => agent.status === 'online').length,
+    offline: agents.value.filter((agent) => agent.status === 'offline').length,
+    pending: agents.value.filter((agent) => agent.status === 'pending').length
+  }
+})
+
 function buildTagPolicy(): TagPolicy {
   if (createForm.value.tagMode === 'allow_all') {
     return { mode: 'allow_all' }
@@ -60,6 +71,26 @@ function buildTagPolicy(): TagPolicy {
     .filter(Boolean)
 
   return { mode: 'allow_list', tags }
+}
+
+function openCreatePanel(): void {
+  showCreatePanel.value = true
+}
+
+function closeCreatePanel(): void {
+  showCreatePanel.value = false
+}
+
+function openMachineDetail(agentId: string): void {
+  selectedAgentId.value = agentId
+}
+
+function closeMachineDetail(): void {
+  selectedAgentId.value = ''
+  installCommand.value = ''
+  installedRemotePlugins.value = []
+  syncJobs.value = []
+  agentInfo.value = null
 }
 
 function updateInstallCommandForSelection(): void {
@@ -91,12 +122,6 @@ async function loadPage(): Promise<void> {
     if (!createForm.value.selectedLocalAddress && addresses.length > 0) {
       createForm.value.selectedLocalAddress = addresses[0]
     }
-
-    if (!selectedAgentId.value && agentList.length > 0) {
-      selectedAgentId.value = agentList[0].id
-    }
-
-    updateInstallCommandForSelection()
   } catch (err) {
     console.error('加载远程 Agent 页面失败:', err)
     error('加载远程 Agent 页面失败')
@@ -168,10 +193,12 @@ async function createAgent(): Promise<void> {
   createForm.value.installProfileTag = ''
   createForm.value.tagInput = ''
   await loadPage()
+
   if (result.record?.id) {
-    selectedAgentId.value = result.record.id
+    openMachineDetail(result.record.id)
   }
   updateInstallCommandForSelection()
+  closeCreatePanel()
   success('安装命令已生成')
 }
 
@@ -228,6 +255,7 @@ async function savePluginConfig(): Promise<void> {
     return
   }
 
+  await loadRemoteAgentStatus()
   success('运行前配置已保存')
 }
 
@@ -267,84 +295,43 @@ onMounted(() => {
 
 <template>
   <div class="content-panel">
-    <h2 class="section-title">远程 Agent</h2>
-    <p class="section-desc">管理 Linux 远程机器、安装命令和插件同步</p>
-
-    <div class="page-grid">
-      <div class="left-column">
-        <div class="service-config">
-          <div class="setting-item vertical">
-            <label class="setting-label">
-              <span>机器名称</span>
-              <span class="setting-desc">用于区分不同 Linux 远程机器</span>
-            </label>
-            <input
-              v-model="createForm.name"
-              class="input"
-              type="text"
-              placeholder="Workshop Linux"
-            />
+    <Transition name="list-slide">
+      <div v-show="!showCreatePanel && !hasDetailPanel" class="scrollable-content">
+        <div class="panel-header">
+          <div>
+            <h2 class="section-title">远程 Agent</h2>
+            <p class="section-desc">管理 Linux 远程机器、安装命令和远端状态</p>
           </div>
-
-          <div class="setting-item vertical">
-            <label class="setting-label">
-              <span>本机发布地址</span>
-              <span class="setting-desc">远程机器需要能访问这个局域网地址</span>
-            </label>
-            <select v-model="createForm.selectedLocalAddress" class="input">
-              <option disabled value="">请选择局域网地址</option>
-              <option v-for="address in localAddresses" :key="address" :value="address">
-                {{ address }}
-              </option>
-            </select>
+          <div class="action-row">
+            <button class="btn" @click="loadPage">刷新状态</button>
+            <button class="btn btn-primary" @click="openCreatePanel">新增远程机器</button>
           </div>
+        </div>
 
-          <div class="setting-item vertical">
-            <label class="setting-label">
-              <span>安装平台标签</span>
-              <span class="setting-desc"
-                >用于选择 agent 安装后置脚本模板，例如 `linux-default` 或
-                `linux-open-iptables`</span
-              >
-            </label>
-            <select v-model="createForm.installProfileTag" class="input">
-              <option value="">无后置脚本</option>
-              <option value="linux-default">linux-default</option>
-              <option value="linux-open-iptables">linux-open-iptables</option>
-            </select>
+        <div class="summary-row">
+          <div class="summary-card">
+            <span class="summary-label">在线机器</span>
+            <strong class="summary-value">{{ machineSummary.online }}</strong>
           </div>
-
-          <div class="setting-item vertical">
-            <label class="setting-label">
-              <span>标签策略</span>
-              <span class="setting-desc">控制这台机器可接收哪些插件标签</span>
-            </label>
-            <select v-model="createForm.tagMode" class="input">
-              <option value="allow_all">全部标签</option>
-              <option value="allow_list">仅允许指定标签</option>
-            </select>
+          <div class="summary-card">
+            <span class="summary-label">待接入</span>
+            <strong class="summary-value">{{ machineSummary.pending }}</strong>
           </div>
-
-          <div v-if="createForm.tagMode === 'allow_list'" class="setting-item vertical">
-            <label class="setting-label">
-              <span>允许标签</span>
-              <span class="setting-desc">使用逗号分隔，例如 `scp,hci`</span>
-            </label>
-            <input v-model="createForm.tagInput" class="input" type="text" placeholder="scp,hci" />
+          <div class="summary-card">
+            <span class="summary-label">离线机器</span>
+            <strong class="summary-value">{{ machineSummary.offline }}</strong>
           </div>
-
-          <button class="btn btn-primary create-btn" @click="createAgent">生成安装命令</button>
         </div>
 
         <div class="machine-panel">
           <h3 class="panel-title">机器列表</h3>
-          <div class="machine-list">
+          <div v-if="agents.length === 0" class="empty-state">还没有远程机器，先新增一台</div>
+          <div v-else class="machine-list">
             <button
               v-for="agent in agents"
               :key="agent.id"
               class="machine-item"
-              :class="{ active: agent.id === selectedAgentId }"
-              @click="selectedAgentId = agent.id"
+              @click="openMachineDetail(agent.id)"
             >
               <div class="machine-top">
                 <span class="machine-name">{{ agent.name }}</span>
@@ -354,16 +341,94 @@ onMounted(() => {
               </div>
               <div class="machine-meta">
                 {{ agent.platform }} · {{ agent.selectedLocalAddress }}
+                <template v-if="agent.installProfileTag"> · {{ agent.installProfileTag }}</template>
               </div>
             </button>
           </div>
         </div>
       </div>
+    </Transition>
 
-      <div class="right-column">
-        <template v-if="selectedAgent">
+    <Transition name="slide">
+      <DetailPanel v-if="showCreatePanel" title="新增远程机器" @back="closeCreatePanel">
+        <div class="detail-content">
+          <div class="service-config">
+            <div class="setting-item vertical">
+              <label class="setting-label">
+                <span>机器名称</span>
+                <span class="setting-desc">用于区分不同 Linux 远程机器</span>
+              </label>
+              <input
+                v-model="createForm.name"
+                class="input"
+                type="text"
+                placeholder="Workshop Linux"
+              />
+            </div>
+
+            <div class="setting-item vertical">
+              <label class="setting-label">
+                <span>本机发布地址</span>
+                <span class="setting-desc">远程机器需要能访问这个局域网地址</span>
+              </label>
+              <select v-model="createForm.selectedLocalAddress" class="input">
+                <option disabled value="">请选择局域网地址</option>
+                <option v-for="address in localAddresses" :key="address" :value="address">
+                  {{ address }}
+                </option>
+              </select>
+            </div>
+
+            <div class="setting-item vertical">
+              <label class="setting-label">
+                <span>安装平台标签</span>
+                <span class="setting-desc">用于选择 agent 安装后置脚本模板</span>
+              </label>
+              <select v-model="createForm.installProfileTag" class="input">
+                <option value="">无后置脚本</option>
+                <option value="linux-default">linux-default</option>
+                <option value="linux-open-iptables">linux-open-iptables</option>
+              </select>
+            </div>
+
+            <div class="setting-item vertical">
+              <label class="setting-label">
+                <span>标签策略</span>
+                <span class="setting-desc">控制这台机器可接收哪些插件标签</span>
+              </label>
+              <select v-model="createForm.tagMode" class="input">
+                <option value="allow_all">全部标签</option>
+                <option value="allow_list">仅允许指定标签</option>
+              </select>
+            </div>
+
+            <div v-if="createForm.tagMode === 'allow_list'" class="setting-item vertical">
+              <label class="setting-label">
+                <span>允许标签</span>
+                <span class="setting-desc">使用逗号分隔，例如 `scp,hci`</span>
+              </label>
+              <input
+                v-model="createForm.tagInput"
+                class="input"
+                type="text"
+                placeholder="scp,hci"
+              />
+            </div>
+
+            <div class="action-row">
+              <button class="btn" @click="closeCreatePanel">取消</button>
+              <button class="btn btn-primary" @click="createAgent">生成安装命令</button>
+            </div>
+          </div>
+        </div>
+      </DetailPanel>
+    </Transition>
+
+    <Transition name="slide">
+      <DetailPanel v-if="hasDetailPanel" title="远程机器详情" @back="closeMachineDetail">
+        <div class="detail-content">
           <div class="status-bar">
-            <span class="status-dot" :class="{ active: selectedAgent.status === 'online' }"></span>
+            <span class="status-dot" :class="{ active: selectedAgent?.status === 'online' }"></span>
             <span class="status-text">
               {{ selectedAgentStatusText }}
               <template v-if="agentInfo?.pid"> · PID {{ agentInfo.pid }}</template>
@@ -371,30 +436,49 @@ onMounted(() => {
             </span>
           </div>
 
-          <div class="service-config">
-            <div class="setting-item vertical">
-              <label class="setting-label">
-                <span>安装命令</span>
-                <span class="setting-desc">在远程 Linux 机器执行这条命令完成接入</span>
-              </label>
-              <textarea
-                :value="installCommand"
-                class="command-box"
-                rows="5"
-                readonly
-                placeholder="生成远程机器后会在这里显示 curl 命令"
-              ></textarea>
-              <div class="action-row">
-                <button class="btn" @click="regenerateInstallCommand">重生成命令</button>
-                <button class="btn btn-primary btn-sm" @click="copyInstallCommand">复制命令</button>
+          <div class="detail-section">
+            <h3 class="panel-title">安装命令</h3>
+            <textarea
+              :value="installCommand"
+              class="command-box"
+              rows="5"
+              readonly
+              placeholder="待接入机器会在这里显示 curl 命令"
+            ></textarea>
+            <div class="action-row">
+              <button class="btn" @click="regenerateInstallCommand">重生成命令</button>
+              <button class="btn btn-primary" @click="copyInstallCommand">复制命令</button>
+            </div>
+          </div>
+
+          <div class="detail-grid">
+            <div class="detail-section">
+              <div class="panel-heading">
+                <h3 class="panel-title">远端已安装插件</h3>
+                <span class="panel-count">{{ installedRemotePlugins.length }}</span>
+              </div>
+              <div v-if="installedRemotePlugins.length === 0" class="empty-state">
+                暂无远端已安装插件
+              </div>
+              <div v-else class="plugin-list">
+                <div v-for="row in installedRemotePlugins" :key="row.name" class="plugin-item">
+                  <div class="plugin-main">
+                    <strong>{{ row.name }}</strong>
+                    <span class="plugin-version">v{{ row.version }}</span>
+                  </div>
+                  <div class="plugin-tags">
+                    {{ row.runtimeModel || 'unknown' }}
+                    <template v-if="row.configStatus"> · config: {{ row.configStatus }}</template>
+                  </div>
+                  <div class="plugin-state">
+                    {{ row.runtimeStatus || row.lastRunStatus || row.lastError || '已安装' }}
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div class="setting-item vertical">
-              <label class="setting-label">
-                <span>单插件运行前配置</span>
-                <span class="setting-desc">先保存配置，再执行远程同步</span>
-              </label>
+            <div class="detail-section">
+              <h3 class="panel-title">单插件运行前配置</h3>
               <select v-model="selectedPluginName" class="input">
                 <option disabled value="">请选择插件</option>
                 <option v-for="row in availablePlugins" :key="row.name" :value="row.name">
@@ -407,41 +491,14 @@ onMounted(() => {
                 rows="8"
               ></textarea>
               <div class="action-row">
-                <button class="btn btn-primary btn-sm" @click="savePluginConfig">保存配置</button>
+                <button class="btn btn-primary" @click="savePluginConfig">保存配置</button>
                 <button class="btn btn-primary" @click="syncSelectedAgent">同步插件</button>
               </div>
             </div>
           </div>
 
-          <div class="api-docs">
-            <div class="panel-heading">
-              <h3 class="docs-title">远端已安装插件</h3>
-              <span class="panel-count">{{ installedRemotePlugins.length }}</span>
-            </div>
-            <div v-if="installedRemotePlugins.length === 0" class="empty-state">
-              暂无远端已安装插件
-            </div>
-            <div v-else class="plugin-list">
-              <div v-for="row in installedRemotePlugins" :key="row.name" class="plugin-item">
-                <div class="plugin-main">
-                  <strong>{{ row.name }}</strong>
-                  <span class="plugin-version">v{{ row.version }}</span>
-                </div>
-                <div class="plugin-tags">
-                  {{ row.runtimeModel || 'unknown' }}
-                  <template v-if="row.configStatus"> · config: {{ row.configStatus }}</template>
-                </div>
-                <div class="plugin-state">
-                  {{ row.runtimeStatus || row.lastRunStatus || row.lastError || '已安装' }}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="api-docs">
-            <div class="panel-heading">
-              <h3 class="docs-title">最近同步日志</h3>
-            </div>
+          <div class="detail-section">
+            <h3 class="panel-title">最近同步日志</h3>
             <div v-if="syncJobs.length === 0" class="empty-state">暂无同步日志</div>
             <div v-else class="job-list">
               <div
@@ -456,21 +513,26 @@ onMounted(() => {
               </div>
             </div>
           </div>
-        </template>
-
-        <div v-else class="empty-state">先在左侧创建或选择一台远程机器</div>
-      </div>
-    </div>
+        </div>
+      </DetailPanel>
+    </Transition>
   </div>
 </template>
 
 <style scoped>
 .content-panel {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-color);
+}
+
+.scrollable-content,
+.detail-content {
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 20px;
-  background: var(--bg-color);
 }
 
 .section-title {
@@ -486,15 +548,57 @@ onMounted(() => {
   margin: 0 0 24px 0;
 }
 
-.page-grid {
-  display: grid;
-  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
-  gap: 24px;
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  gap: 16px;
 }
 
-.left-column,
-.right-column {
-  min-width: 0;
+.summary-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.summary-card {
+  border: 1px solid var(--divider-color);
+  border-radius: 10px;
+  background: var(--card-bg);
+  padding: 14px 16px;
+}
+
+.summary-label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.summary-value {
+  display: block;
+  margin-top: 8px;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-color);
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 20px;
+}
+
+.detail-section {
+  margin-bottom: 20px;
+  padding: 20px;
+  background: var(--hover-bg);
+  border-radius: 10px;
+}
+
+.machine-panel {
+  margin-top: 24px;
 }
 
 .service-config {
@@ -545,12 +649,8 @@ onMounted(() => {
   resize: vertical;
 }
 
-.create-btn {
-  margin-top: 8px;
-}
-
-.machine-panel {
-  margin-top: 24px;
+.config-box {
+  min-height: 180px;
 }
 
 .panel-title,
@@ -583,11 +683,6 @@ onMounted(() => {
 
 .machine-item {
   cursor: pointer;
-}
-
-.machine-item.active {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-color) 45%, transparent);
 }
 
 .machine-top,
@@ -669,11 +764,9 @@ onMounted(() => {
   color: var(--text-secondary);
 }
 
-.api-docs {
-  margin-top: 20px;
-  padding: 20px;
-  background: var(--hover-bg);
-  border-radius: 10px;
+.empty-state {
+  color: var(--text-secondary);
+  padding: 24px 0;
 }
 
 .action-row {
@@ -681,17 +774,9 @@ onMounted(() => {
   justify-content: flex-end;
 }
 
-.config-box {
-  min-height: 180px;
-}
-
-.empty-state {
-  color: var(--text-secondary);
-  padding: 24px 0;
-}
-
 @media (max-width: 960px) {
-  .page-grid {
+  .summary-row,
+  .detail-grid {
     grid-template-columns: 1fr;
   }
 }
