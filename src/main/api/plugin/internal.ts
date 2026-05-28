@@ -323,6 +323,13 @@ export class InternalPluginAPI {
       return await remoteAgentManager.createRemoteAgent(payload)
     })
 
+    ipcMain.handle('internal:remote-agent-delete', async (event, machineId: string) => {
+      if (!requireInternalPlugin(this.pluginManager, event)) {
+        throw new PermissionDeniedError('internal:remote-agent-delete')
+      }
+      return await remoteAgentManager.deleteRemoteAgent(machineId)
+    })
+
     ipcMain.handle(
       'internal:remote-agent-regenerate-install-command',
       async (event, machineId: string, selectedLocalAddress: string) => {

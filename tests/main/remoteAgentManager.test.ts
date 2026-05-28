@@ -131,4 +131,95 @@ describe('RemoteAgentManager', () => {
     expect(mockRestartPlugin).not.toHaveBeenCalled()
     expect(mockUninstallPlugin).not.toHaveBeenCalled()
   })
+
+  it('deletes a machine together with local configs and sync jobs', async () => {
+    mockDbGet.mockImplementation((key: string) => {
+      switch (key) {
+        case 'settings-remote-agents':
+          return {
+            items: [
+              {
+                id: 'agent-1',
+                name: 'Workshop Linux',
+                platform: 'linux',
+                tagPolicy: { mode: 'allow_all' },
+                status: 'pending',
+                selectedLocalAddress: '192.168.1.23',
+                onboardingToken: 'token-1',
+                onboardingExpiresAt: '2026-05-27T09:00:00.000Z'
+              },
+              {
+                id: 'agent-2',
+                name: 'Backup Linux',
+                platform: 'linux',
+                tagPolicy: { mode: 'allow_all' },
+                status: 'online',
+                selectedLocalAddress: '192.168.1.24',
+                agentBaseUrl: 'http://10.0.0.6:8123'
+              }
+            ]
+          }
+        case 'settings-remote-agent-plugin-configs':
+          return [
+            {
+              machineId: 'agent-1',
+              pluginName: 'mysql-helper',
+              config: { host: '127.0.0.1' },
+              updatedAt: '2026-05-27T09:00:00.000Z'
+            },
+            {
+              machineId: 'agent-2',
+              pluginName: 'scp-tool',
+              config: { host: '10.0.0.6' },
+              updatedAt: '2026-05-27T09:00:00.000Z'
+            }
+          ]
+        case 'settings-remote-agent-sync-jobs':
+          return [
+            {
+              machineId: 'agent-1',
+              pluginName: 'mysql-helper',
+              action: 'install',
+              status: 'success',
+              message: 'ok',
+              startedAt: '2026-05-27T09:00:00.000Z',
+              finishedAt: '2026-05-27T09:00:01.000Z'
+            },
+            {
+              machineId: 'agent-2',
+              pluginName: 'scp-tool',
+              action: 'configure',
+              status: 'success',
+              message: 'ok',
+              startedAt: '2026-05-27T09:00:00.000Z',
+              finishedAt: '2026-05-27T09:00:01.000Z'
+            }
+          ]
+        default:
+          return undefined
+      }
+    })
+
+    const manager = new RemoteAgentManager()
+    const result = await manager.deleteRemoteAgent('agent-1')
+
+    expect(result).toEqual({ success: true })
+    expect(mockDbPut).toHaveBeenCalledWith('settings-remote-agents', {
+      items: [
+        expect.objectContaining({
+          id: 'agent-2'
+        })
+      ]
+    })
+    expect(mockDbPut).toHaveBeenCalledWith('settings-remote-agent-plugin-configs', [
+      expect.objectContaining({
+        machineId: 'agent-2'
+      })
+    ])
+    expect(mockDbPut).toHaveBeenCalledWith('settings-remote-agent-sync-jobs', [
+      expect.objectContaining({
+        machineId: 'agent-2'
+      })
+    ])
+  })
 })

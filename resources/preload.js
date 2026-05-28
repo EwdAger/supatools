@@ -838,6 +838,8 @@ window.ztools = {
       await electron.ipcRenderer.invoke('internal:remote-agent-local-addresses'),
     createRemoteAgent: async (payload) =>
       await electron.ipcRenderer.invoke('internal:remote-agent-create', payload),
+    deleteRemoteAgent: async (machineId) =>
+      await electron.ipcRenderer.invoke('internal:remote-agent-delete', machineId),
     regenerateRemoteAgentInstallCommand: async (machineId, selectedLocalAddress) =>
       await electron.ipcRenderer.invoke(
         'internal:remote-agent-regenerate-install-command',

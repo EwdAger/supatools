@@ -77,3 +77,9 @@ export function markRemoteAgentOnline(
     )
   }
 }
+
+export function removeRemoteAgent(doc: RemoteAgentsDoc, machineId: string): RemoteAgentsDoc {
+  return {
+    items: doc.items.filter((item) => item.id !== machineId)
+  }
+}

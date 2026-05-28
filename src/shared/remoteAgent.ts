@@ -103,3 +103,15 @@ export interface PendingRemoteAgentRecord extends RemoteAgentRecord {
   onboardingToken: string
   onboardingExpiresAt: string
 }
+
+export function buildRemoteAgentInstallCommand(input: {
+  selectedLocalAddress: string
+  onboardingToken: string
+  port?: number
+  debug?: boolean
+}): string {
+  const port = input.port ?? 37121
+  const scriptUrl = `http://${input.selectedLocalAddress}:${port}/agent/install/${input.onboardingToken}.sh`
+
+  return input.debug ? `curl -fsSL ${scriptUrl} | sh -s -- --debug` : `curl -fsSL ${scriptUrl} | sh`
+}

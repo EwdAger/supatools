@@ -94,6 +94,7 @@ declare global {
           installCommand?: string
           error?: string
         }>
+        deleteRemoteAgent: (machineId: string) => Promise<{ success: boolean; error?: string }>
         regenerateRemoteAgentInstallCommand: (
           machineId: string,
           selectedLocalAddress: string

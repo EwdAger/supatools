@@ -5,7 +5,8 @@ import { readRemotePluginWarehouse } from '../../api/renderer/remotePluginWareho
 import {
   createEmptyRemoteAgentsDoc,
   createPendingRemoteAgent,
-  markRemoteAgentOnline
+  markRemoteAgentOnline,
+  removeRemoteAgent
 } from './store'
 import { buildRemoteAgentSyncPlan } from './deployment'
 import { RemoteAgentClient } from './client'
@@ -28,6 +29,7 @@ import type {
   RemoteAgentTagPolicy
 } from '../../../shared/remoteAgent'
 import {
+  buildRemoteAgentInstallCommand,
   REMOTE_AGENTS_DB_KEY,
   REMOTE_AGENT_PLUGIN_CONFIGS_DB_KEY,
   REMOTE_AGENT_SYNC_JOBS_DB_KEY
@@ -71,6 +73,10 @@ export class RemoteAgentManager {
 
   public async listRemoteAgentLocalAddresses(): Promise<string[]> {
     return listLanIpv4Addresses()
+  }
+
+  public hasRemoteAgent(machineId: string): boolean {
+    return this.readAgentsDoc().items.some((item) => item.id === machineId)
   }
 
   public async createRemoteAgent(
@@ -124,6 +130,22 @@ export class RemoteAgentManager {
       record,
       installCommand: this.buildInstallCommand(record)
     }
+  }
+
+  public async deleteRemoteAgent(machineId: string): Promise<{ success: boolean; error?: string }> {
+    const existing = this.readAgentsDoc().items.find((item) => item.id === machineId)
+    if (!existing) {
+      return { success: false, error: 'Remote agent not found' }
+    }
+
+    this.writeAgentsDoc(removeRemoteAgent(this.readAgentsDoc(), machineId))
+    databaseAPI.dbPut(
+      REMOTE_AGENT_PLUGIN_CONFIGS_DB_KEY,
+      this.readPluginConfigs().filter((item) => item.machineId !== machineId)
+    )
+    this.writeSyncJobs(this.readSyncJobs().filter((item) => item.machineId !== machineId))
+    await this.refreshOnboardingService()
+    return { success: true }
   }
 
   public async saveRemoteAgentPluginConfig(input: {
@@ -313,7 +335,11 @@ export class RemoteAgentManager {
   }
 
   private buildInstallCommand(record: PendingRemoteAgentRecord): string {
-    return `curl -fsSL http://${record.selectedLocalAddress}:${this.onboardingService.getPort()}/agent/install/${record.onboardingToken}.sh | sh`
+    return buildRemoteAgentInstallCommand({
+      selectedLocalAddress: record.selectedLocalAddress,
+      onboardingToken: record.onboardingToken,
+      port: this.onboardingService.getPort()
+    })
   }
 
   private buildOnboardingInput(

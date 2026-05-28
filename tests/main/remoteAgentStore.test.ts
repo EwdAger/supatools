@@ -9,6 +9,7 @@ vi.mock('os', () => ({
 }))
 
 import {
+  buildRemoteAgentInstallCommand,
   REMOTE_AGENTS_DB_KEY,
   REMOTE_AGENT_PLUGIN_CONFIGS_DB_KEY,
   REMOTE_AGENT_SYNC_JOBS_DB_KEY
@@ -18,7 +19,8 @@ import { RemoteAgentOnboardingService } from '../../src/main/core/remoteAgent/on
 import {
   createEmptyRemoteAgentsDoc,
   createPendingRemoteAgent,
-  markRemoteAgentOnline
+  markRemoteAgentOnline,
+  removeRemoteAgent
 } from '../../src/main/core/remoteAgent/store'
 
 describe('remote agent store', () => {
@@ -151,6 +153,53 @@ describe('remote agent store', () => {
     expect(online.items[0].onboardingExpiresAt).toBeUndefined()
   })
 
+  it('removes a machine record from the agents doc', () => {
+    const doc = removeRemoteAgent(
+      {
+        items: [
+          {
+            id: 'agent-1',
+            name: 'Workshop Linux',
+            platform: 'linux',
+            tagPolicy: { mode: 'allow_all' },
+            status: 'online',
+            selectedLocalAddress: '192.168.1.23'
+          } as any,
+          {
+            id: 'agent-2',
+            name: 'Backup Linux',
+            platform: 'linux',
+            tagPolicy: { mode: 'allow_all' },
+            status: 'pending',
+            selectedLocalAddress: '192.168.1.24',
+            onboardingToken: 'token-2',
+            onboardingExpiresAt: '2026-05-07T08:15:00.000Z'
+          } as any
+        ]
+      },
+      'agent-1'
+    )
+
+    expect(doc.items.map((item) => item.id)).toEqual(['agent-2'])
+  })
+
+  it('builds normal and debug install commands with the expected shell shape', () => {
+    expect(
+      buildRemoteAgentInstallCommand({
+        selectedLocalAddress: '192.168.1.23',
+        onboardingToken: 'token-1'
+      })
+    ).toBe('curl -fsSL http://192.168.1.23:37121/agent/install/token-1.sh | sh')
+
+    expect(
+      buildRemoteAgentInstallCommand({
+        selectedLocalAddress: '192.168.1.23',
+        onboardingToken: 'token-1',
+        debug: true
+      })
+    ).toBe('curl -fsSL http://192.168.1.23:37121/agent/install/token-1.sh | sh -s -- --debug')
+  })
+
   it('lists unique lan ipv4 addresses from os network interfaces', () => {
     mockNetworkInterfaces.mockReturnValue({
       lo: [{ address: '127.0.0.1', family: 'IPv4', internal: true }],
@@ -201,6 +250,12 @@ describe('remote agent store', () => {
     expect(script).toContain('nohup "$AGENT_ROOT/start-agent.sh" &')
     expect(script).toContain('AGENT_INSTALL_PROFILE_TAG="linux-default"')
     expect(script).toContain('[ztools-agent hook] linux-default: no extra system changes applied')
+    expect(script).toContain('DEBUG_MODE=0')
+    expect(script).toContain('case "$1" in')
+    expect(script).toContain('--debug)')
+    expect(script).toContain('set -x')
+    expect(script).toContain('log_step "register remote agent back to desktop host"')
+    expect(script).toContain('curl -v -X POST "$AGENT_REGISTER_URL" \\')
   })
 
   it('shell-escapes machine ids, tokens, and urls in the install script', () => {

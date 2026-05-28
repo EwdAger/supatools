@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { DetailPanel, useToast } from '@/components'
 import { buildDeployablePluginRows } from './remoteAgentUtils'
 
-const { success, error, warning } = useToast()
+const { success, error, warning, confirm } = useToast()
 const route = useRoute()
 const router = useRouter()
 
@@ -19,6 +19,7 @@ const agentInfo = ref<any | null>(null)
 const selectedAgentId = ref('')
 const selectedPluginName = ref('')
 const installCommand = ref('')
+const debugInstallCommand = ref('')
 const pluginConfigText = ref('{\n  \n}')
 const showCreatePanel = ref(false)
 
@@ -91,9 +92,19 @@ function openMachineDetail(agentId: string): void {
 function closeMachineDetail(): void {
   selectedAgentId.value = ''
   installCommand.value = ''
+  debugInstallCommand.value = ''
   installedRemotePlugins.value = []
   syncJobs.value = []
   agentInfo.value = null
+}
+
+function buildInstallCommand(
+  selectedLocalAddress: string,
+  onboardingToken: string,
+  debug: boolean = false
+): string {
+  const scriptUrl = `http://${selectedLocalAddress}:37121/agent/install/${onboardingToken}.sh`
+  return debug ? `curl -fsSL ${scriptUrl} | sh -s -- --debug` : `curl -fsSL ${scriptUrl} | sh`
 }
 
 function updateInstallCommandForSelection(): void {
@@ -103,11 +114,20 @@ function updateInstallCommandForSelection(): void {
     selectedAgent.value.onboardingToken &&
     selectedAgent.value.selectedLocalAddress
   ) {
-    installCommand.value = `curl -fsSL http://${selectedAgent.value.selectedLocalAddress}:37121/agent/install/${selectedAgent.value.onboardingToken}.sh | sh`
+    installCommand.value = buildInstallCommand(
+      selectedAgent.value.selectedLocalAddress,
+      selectedAgent.value.onboardingToken
+    )
+    debugInstallCommand.value = buildInstallCommand(
+      selectedAgent.value.selectedLocalAddress,
+      selectedAgent.value.onboardingToken,
+      true
+    )
     return
   }
 
   installCommand.value = ''
+  debugInstallCommand.value = ''
 }
 
 async function loadPage(): Promise<void> {
@@ -233,6 +253,39 @@ async function copyInstallCommand(): Promise<void> {
   }
 }
 
+async function copyDebugInstallCommand(): Promise<void> {
+  if (!debugInstallCommand.value) return
+  try {
+    await navigator.clipboard.writeText(debugInstallCommand.value)
+    success('调试命令已复制')
+  } catch {
+    error('复制失败')
+  }
+}
+
+async function deleteAgent(agentId: string, agentName: string): Promise<void> {
+  const confirmed = await confirm({
+    title: '删除远程机器',
+    message: `确认删除远程机器「${agentName}」吗？\n\n将同时清理该机器的本地配置和同步日志，不会操作远端已安装插件。`,
+    type: 'warning',
+    confirmText: '删除',
+    cancelText: '取消'
+  })
+  if (!confirmed) return
+
+  const result = await window.ztools.internal.deleteRemoteAgent(agentId)
+  if (!result.success) {
+    error(result.error || '删除远程机器失败')
+    return
+  }
+
+  if (selectedAgentId.value === agentId) {
+    closeMachineDetail()
+  }
+  await loadPage()
+  success('远程机器已删除')
+}
+
 async function savePluginConfig(): Promise<void> {
   if (!selectedAgent.value || !selectedPluginName.value) {
     warning('请选择远程机器和插件')
@@ -341,23 +394,26 @@ watch(
           <h3 class="panel-title">机器列表</h3>
           <div v-if="agents.length === 0" class="empty-state">还没有远程机器，先新增一台</div>
           <div v-else class="machine-list">
-            <button
-              v-for="agent in agents"
-              :key="agent.id"
-              class="machine-item"
-              @click="openMachineDetail(agent.id)"
-            >
+            <div v-for="agent in agents" :key="agent.id" class="machine-item">
               <div class="machine-top">
-                <span class="machine-name">{{ agent.name }}</span>
-                <span class="status-pill" :class="`status-${agent.status}`">{{
-                  agent.status
-                }}</span>
+                <button class="machine-main" @click="openMachineDetail(agent.id)">
+                  <span class="machine-name">{{ agent.name }}</span>
+                  <span class="status-pill" :class="`status-${agent.status}`">{{
+                    agent.status
+                  }}</span>
+                </button>
+                <button
+                  class="btn btn-danger btn-sm"
+                  @click.stop="deleteAgent(agent.id, agent.name)"
+                >
+                  删除
+                </button>
               </div>
               <div class="machine-meta">
                 {{ agent.platform }} · {{ agent.selectedLocalAddress }}
                 <template v-if="agent.installProfileTag"> · {{ agent.installProfileTag }}</template>
               </div>
-            </button>
+            </div>
           </div>
         </div>
       </div>
@@ -459,9 +515,20 @@ watch(
               readonly
               placeholder="待接入机器会在这里显示 curl 命令"
             ></textarea>
+            <p class="setting-desc command-hint">
+              如果远程环境执行时卡住，可改用下方调试命令定位停在了哪一步。
+            </p>
+            <textarea
+              :value="debugInstallCommand"
+              class="command-box"
+              rows="5"
+              readonly
+              placeholder="调试命令会在这里显示"
+            ></textarea>
             <div class="action-row">
               <button class="btn" @click="regenerateInstallCommand">重生成命令</button>
               <button class="btn btn-primary" @click="copyInstallCommand">复制命令</button>
+              <button class="btn" @click="copyDebugInstallCommand">复制调试命令</button>
             </div>
           </div>
 
@@ -663,6 +730,10 @@ watch(
   resize: vertical;
 }
 
+.command-hint {
+  margin: 8px 0 10px;
+}
+
 .config-box {
   min-height: 180px;
 }
@@ -695,11 +766,8 @@ watch(
   text-align: left;
 }
 
-.machine-item {
-  cursor: pointer;
-}
-
 .machine-top,
+.machine-main,
 .plugin-main,
 .panel-heading,
 .job-item,
@@ -714,6 +782,15 @@ watch(
 .plugin-version,
 .panel-count {
   color: var(--text-color);
+}
+
+.machine-main {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  min-width: 0;
 }
 
 .machine-meta,
